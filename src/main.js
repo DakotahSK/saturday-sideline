@@ -70,8 +70,26 @@ const PB={
  sluggo:{n:'Sluggo',cat:'pass',f:'gun',d:'Sell the slant, then go. Punishes a jumpy corner.',drop:'deep',routes:{X:'sluggo',Z:'sluggo',S:'hitch',RB:'checkdown'}},
  hitchseam:{n:'Hitch Seam',cat:'pass',f:'single',d:'Hitches outside, seams up the hashes. Splits two-high safeties.',drop:'quick',routes:{X:'hitch',Z:'hitch',S:'seam',TE:'seam',RB:'flat'}},
  iso:{n:'Iso',cat:'run',f:'iform',d:'Fullback leads straight into the linebacker. Old-school downhill football.',run:{m:3.5,sd:3.3,big:.05,loss:.05,hole:1,c:'RB',sy:1},vs:{c2:.6,c4:.4,c0:-.3,goal:-.4}},
- hail:{n:'Hail Mary',cat:'pass',f:'empty',d:'Everyone to the end zone. Pray.',drop:'deep',routes:{X:'hail',S:'hail',S2:'hail',Z:'hail'}}
+ hail:{n:'Hail Mary',cat:'pass',f:'empty',d:'Everyone to the end zone. Pray.',drop:'deep',routes:{X:'hail',S:'hail',S2:'hail',Z:'hail'}},
+ gtcounter:{n:'Counter Trey',cat:'run',f:'gun',d:'Guard and tackle both pull across. A convoy against the grain.',run:{m:3.6,sd:4.8,big:.08,loss:.1,hole:3.8,c:'RB',fake:1},vs:{c0:2,fire:1.8,c1:.8,cblitz:1,goal:-1.2,bear:-.8,c3:-.2}},
+ fbdive:{n:'FB Dive',cat:'run',f:'iform',d:'Quick give to the fullback. Nothing fancy, rarely loses yards.',run:{m:2.5,sd:1.9,big:.02,loss:.03,hole:.6,c:'FB',sy:1},vs:{goal:-.3,bear:-.4,prev:.5}},
+ speedopt:{n:'Speed Option',cat:'run',f:'gun',d:'Quarterback attacks the edge and pitches off the last defender.',run:{m:3.7,sd:5.4,big:.09,loss:.1,hole:11,c:'RB',edge:1},vs:{c1:1.5,c0:2,c2m:1,goal:-1,c2:-.5,c3:.3,spy:-1.5,cblitz:-.8}},
+ qbpower:{n:'QB Power',cat:'run',f:'gun',d:'Guard pulls, back leads, quarterback follows. An extra blocker at the point.',run:{m:3.3,sd:3,big:.04,loss:.05,hole:3,c:'QB',sy:1},vs:{c1:1,c0:1,c2m:.8,c2:.6,goal:-.3,spy:-1.5,bear:-.6}},
+ reverse:{n:'Reverse',cat:'run',f:'gun',d:'Flow one way, hand it to the receiver coming back. Big play or big loss.',run:{m:3,sd:7.5,big:.15,loss:.24,hole:13,c:'Z',edge:1},vs:{c0:2,fire:1.5,goal:1.5,bear:1.5,c2:-1.5,c4:-1,c6:-1,cblitz:-1}},
+ rpo:{n:'RPO Glance',cat:'pass',f:'gun',rpo:1,d:'Read the box. Hand it off against a light front, pull it and throw the glance if they load up.',drop:'rpo',routes:{X:'glance',S:'bubble',Z:'hitch'},run:{m:3.2,sd:3.2,big:.05,loss:.06,hole:1.5,c:'RB'},vs:{goal:-1,prev:1,c2:.5,c0:-.5}},
+ sprint:{n:'Sprint Out',cat:'pass',f:'gun',d:'Quarterback rolls right with a three-level flood in front of him.',drop:'sprint',routes:{Z:'out',TE:'flat',X:'cross',S:'drag'}},
+ texas:{n:'Texas',cat:'pass',f:'gun',d:'Back angles out, then snaps it inside under the linebackers.',drop:'normal',routes:{RB:'angle',TE:'seam',X:'curl',Z:'go',S:'out'}},
+ tescreen:{n:'TE Delay Screen',cat:'pass',f:'single',d:'Tight end blocks, counts to two, then slips into the middle behind the guards.',drop:'screen',routes:{TE:'tunnel',X:'go',Z:'go',S:'drag'}},
+ yankee:{n:'PA Yankee',cat:'pass',f:'single',d:'Hard run fake, a post over the top and a deep crosser underneath it.',drop:'pa',routes:{X:'post',Z:'over',TE:'flat'}},
+ switchv:{n:'Slot Wheel',cat:'pass',f:'gun',d:'Outside receiver bends to the post, slot wheels up the sideline behind him.',drop:'deep',routes:{X:'post',S:'wheel',Z:'curl',TE:'drag',RB:'checkdown'}},
+ flea:{n:'Flea Flicker',cat:'pass',f:'iform',d:'Hand it off, pitch it back, throw it deep. Slow to develop.',drop:'flea',routes:{X:'post',Z:'go',TE:'over'}}
 };
+/* play-call menu groups, so the lists stay short on a phone */
+const PBG={run:[['in','Inside',['iz','power','iso','trap','draw','fbdive','sneak']],['out','Outside',['stretch','toss','jet','counter','gtcounter','reverse']],['qb','QB / Option',['option','speedopt','qbdraw','qbpower']]],
+ pass:[['quick','Quick',['slants','stick','hitchseam','fade','rpo']],['mid','Medium',['mesh','curlflat','smash','sail','levels','shallow','texas','wheel']],['deep','Deep',['verts','dagger','ycross','sluggo','switchv','hail']],['pa','Action',['pashot','boot','yankee','sprint','flea']],['scr','Screen',['screen','bubble','tunnel','tescreen']]],
+ def:[['zone','Zone',['c3','c2','c4','c6','tampa']],['man','Man',['c1','c2m','spy']],['blitz','Pressure',['fire','c0','cblitz','bear']],['sit','Situation',['goal','prev']]]};
+let PBSUB={};
+function pbGroup(tab,k){const g=PBG[tab].find(x=>x[2].includes(k));return g?g[0]:null}
 const RUNS=Object.keys(PB).filter(k=>PB[k].cat==='run'), PASSES=Object.keys(PB).filter(k=>PB[k].cat==='pass');
 const RT={
  go:{w:[[0,5],[-.6,34]],c:'deepO'},
@@ -93,7 +111,10 @@ const RT={
  fade:{w:[[0,3],[-1.6,13],[-1.2,15]],c:'deepO',stop:1,od:-.13},
  hail:{w:[[0,4],[0,48]],c:'hail'},
  tunnel:{w:[[2,-1.2],[5,-1.6]],c:'screen',delay:.7,stop:1},
- sluggo:{w:[[0,3],[3.5,7],[2,32]],c:'deepO'}
+ sluggo:{w:[[0,3],[3.5,7],[2,32]],c:'deepO'},
+ glance:{w:[[0,5],[4,12],[7,21]],c:'mid',od:.04},
+ angle:{w:[[-3.5,1.5],[-5,3.5],[1.5,8],[6,10]],c:'cross',od:.02},
+ over:{w:[[0,7],[13,16],[30,19]],c:'cross',od:-.04}
 };
 const DC={
  c2:{n:'Cover 2',d:'Two deep halves. Squeezes the sidelines, soft in the seams.',run:.9,tp:3.0,rush:4},
@@ -105,7 +126,11 @@ const DC={
  goal:{n:'Goal Line',d:'Eight in the box. Stops the run, prays against the pass.',run:-2.5,tp:2.6,rush:5},
  c2m:{n:'Cover 2 Man',d:'Man under, two safeties over the top. Smothers routes, soft to the run.',run:.5,tp:2.9,rush:4},
  tampa:{n:'Tampa 2',d:'Middle linebacker sprints to the deep middle. Closes the seam.',run:.6,tp:3.0,rush:4},
- prev:{n:'Prevent',d:'Rush three, drop eight. Gives up underneath, nothing deep.',run:2.5,tp:3.9,rush:3}
+ prev:{n:'Prevent',d:'Rush three, drop eight. Gives up underneath, nothing deep.',run:2.5,tp:3.9,rush:3},
+ c6:{n:'Cover 6',d:'Quarters to one side, a deep half to the other. Sound against deep outs.',run:.5,tp:3.0,rush:4},
+ spy:{n:'Cover 1 Spy',d:'Man across the board with a linebacker mirroring the quarterback. Shuts down scrambles.',run:.1,tp:3.0,rush:4},
+ cblitz:{n:'Corner Blitz',d:'Corner comes off the edge, safety rotates over. Leaves the flat open behind him.',run:-.2,tp:2.35,rush:5},
+ bear:{n:'Bear Front',d:'Five across the line, every gap covered. Tough to run on, thin on the back end.',run:-1.4,tp:2.5,rush:5}
 };
 const COV={
  c2:{quick:-.04,flat:-.1,mid:.08,cross:.02,deepI:.14,deepO:-.1,screen:-.1,hail:-.05},
@@ -117,9 +142,13 @@ const COV={
  goal:{quick:.05,flat:.08,mid:.1,cross:.05,deepI:.24,deepO:.2,screen:.04,hail:.05},
  c2m:{quick:-.1,flat:.03,mid:-.07,cross:.06,deepI:-.04,deepO:-.1,screen:.02,hail:-.06},
  tampa:{quick:.02,flat:-.05,mid:.03,cross:-.02,deepI:-.12,deepO:-.08,screen:-.06,hail:-.06},
- prev:{quick:.14,flat:.15,mid:.08,cross:.06,deepI:-.34,deepO:-.34,screen:.05,hail:-.12}
+ prev:{quick:.14,flat:.15,mid:.08,cross:.06,deepI:-.34,deepO:-.34,screen:.05,hail:-.12},
+ c6:{quick:.03,flat:-.02,mid:.06,cross:.04,deepI:-.06,deepO:-.14,screen:-.02,hail:-.05},
+ spy:{quick:-.05,flat:.02,mid:-.03,cross:.08,deepI:.05,deepO:.07,screen:-.03,hail:0},
+ cblitz:{quick:-.03,flat:.12,mid:.03,cross:.02,deepI:-.02,deepO:.1,screen:.1,hail:0},
+ bear:{quick:-.03,flat:.04,mid:.04,cross:.1,deepI:.14,deepO:.12,screen:.08,hail:.02}
 };
-const LOOK={c2:'Two deep safeties, corners pressed',c3:'One high safety, another rolled down',c4:'Two safeties at 11 yards, corners off',c1:'One high, corners pressed tight',c0:'No deep safety. Everyone crowding the line',fire:'Linebackers creeping up, one high',goal:'Eight in the box',prev:'Everyone 15 yards deep',c2m:'Two deep safeties, corners in press',tampa:'Two deep, middle linebacker cheating back'};
+const LOOK={c2:'Two deep safeties, corners pressed',c3:'One high safety, another rolled down',c4:'Two safeties at 11 yards, corners off',c1:'One high, corners pressed tight',c0:'No deep safety. Everyone crowding the line',fire:'Linebackers creeping up, one high',goal:'Eight in the box',prev:'Everyone 15 yards deep',c2m:'Two deep safeties, corners in press',tampa:'Two deep, middle linebacker cheating back',c6:'Two deep, one corner pressed and one off',spy:'One high, a linebacker sitting over the ball',cblitz:'One high, a corner creeping toward the line',bear:'Five on the line, one safety deep'};
 const NUMR={QB:[1,19],RB:[20,39],FB:[30,49],X:[1,19],Z:[1,19],S:[1,19],S2:[80,89],TE:[80,89],LT:[70,79],LG:[60,69],C:[50,59],RG:[60,69],RT:[70,79],K:[30,49],DE1:[90,99],DT1:[90,99],DT2:[90,99],DE2:[40,58],LB1:[30,59],LB2:[30,59],LB3:[30,59],CB1:[1,29],CB2:[1,29],FS:[1,29],SS:[1,29]};
 
 let S=null, G=null, L=null, confirmReset=false;
@@ -3094,7 +3123,7 @@ function spots(fk,bx){
   for(const k in f.sl){const v=f.sl[k];o[k]=v==='L'?[Math.max(3.5,bx-17),-.95]:v==='R'?[Math.min(49.8,bx+17),-.95]:[clamp(bx+v[0],2.5,50.8),v[1]]}
   return o;
 }
-function spotsFor(pk,bx){const o=spots(PB[pk].f,bx);if(pk==='jet'&&o.S)o.S=[bx-5.5,-1.1];return o}
+function spotsFor(pk,bx){const o=spots(PB[pk].f,bx);if(pk==='jet'&&o.S)o.S=[bx-5.5,-1.1];if(pk==='reverse'&&o.Z)o.Z=[bx+9.5,-1.4];return o}
 function samp(p,t){
   if(!p||!p.length)return [0,0];
   if(t<=p[0][0])return [p[0][1],p[0][2]];
@@ -3126,6 +3155,10 @@ function dspots(dc,bx,osp){
    case 'goal':set('LB1',bx-3.5,3);set('LB2',bx,3);set('LB3',bx+3.5,3);set('SS',bx-6,4.2);set('FS',bx+6,4.2);set('CB1',null,4);set('CB2',null,4);break;
    case 'c2m':set('CB1',null,1.8);set('CB2',null,1.8);set('FS',bx-10,14.5);set('SS',bx+10,14.5);set('LB2',bx,4.2);break;
    case 'tampa':set('CB1',Lx+.8,4);set('CB2',Rx-.8,4);set('FS',bx-11,14);set('SS',bx+11,14);set('LB2',bx,7.5);break;
+   case 'c6':set('CB1',Lx+.8,3.5);set('CB2',null,8.5);set('FS',bx-11,14);set('SS',bx+7,11);break;
+   case 'spy':set('CB1',null,1.8);set('CB2',null,1.8);set('FS',bx,14.5);set('SS',bx+5,6.5);set('LB2',bx,5.2);break;
+   case 'cblitz':set('CB1',Lx+1.2,2.2);set('CB2',null,8);set('FS',Lx+3.5,9.5);set('SS',bx+1,14.5);break;
+   case 'bear':set('DE1',bx-4.3,1.1);set('DE2',bx+4.3,1.1);set('LB1',bx-6.6,1.4);set('LB3',bx+7.6,1.6);set('LB2',bx,4);set('SS',bx+3.6,4.6);set('FS',bx,13);set('CB1',null,1.8);set('CB2',null,1.8);break;
    case 'prev':set('LB1',bx-8,10);set('LB2',bx,9);set('LB3',bx+8,10);set('CB1',null,14);set('CB2',null,14);set('FS',bx-8,21);set('SS',bx+8,21);set('DE2',bx+3,6);break;
   }
   for(const k in o){o[k][0]=clamp(o[k][0],1,52.3)}
@@ -3134,7 +3167,7 @@ function dspots(dc,bx,osp){
 function rushersOf(dc){
   const n=DC[dc].rush,b=['DE1','DT1','DT2','DE2'];
   if(n===3)return ['DE1','DT1','DT2'];
-  if(n===5)return dc==='fire'?[...b,'LB1']:[...b,'LB2'];
+  if(n===5)return [...b,dc==='fire'||dc==='bear'?'LB1':dc==='cblitz'?'CB1':'LB2'];
   if(n===6)return [...b,'LB1','LB2'];
   return b;
 }
@@ -3142,7 +3175,7 @@ function rushersOf(dc){
 /* ---- play building ---- */
 function buildPlay(side,pk,dc){
   const pl=PB[pk],los=G.ball,bx=G.bx,sp=spotsFor(pk,bx);
-  const P={side,pk,dc,los,bx,form:pl.f,isRun:pl.cat==='run',paths:{},recv:[],spots:sp};
+  const P={side,pk,dc,los,bx,form:pl.f,isRun:pl.rpo?R()<(DC[dc].run>=.5?.8:DC[dc].run<=-.4?.15:.5):pl.cat==='run',paths:{},recv:[],spots:sp};
   const ps=R()<.5?-1:1;P.ps=ps;
   for(const n of OLN){const [x,dy]=sp[n];P.paths[n]=P.isRun?[[0,x,los+dy],[.5,x+ps*.4,los+dy+1],[3,x+ps*.8,los+dy+1.6]]:[[0,x,los+dy],[.45,x,los+dy-1.1],[4,x,los+dy-1.5]]}
   if(P.isRun)buildRun(P);else buildPass(P);
@@ -3152,7 +3185,7 @@ function buildPlay(side,pk,dc){
 function runRoll(side,pk,dc){
   const pl=PB[pk],p=pl.run,e=effE(side,true);
   let c=p.c,mean=p.m+e*.7+DC[dc].run+(pl.vs[dc]||0),sd=p.sd,big=p.big,loss=p.loss;
-  if(pk==='option'&&R()<.45){c='QB';mean+=.5;sd+=1}
+  if((pk==='option'&&R()<.45)||(pk==='speedopt'&&R()<.35)){c='QB';mean+=.5;sd+=1}
   if(p.sy&&G.togo<=2)mean+=1.2;
   if(dc==='goal')big*=.5;if(dc==='c0')big+=.05;if(dc==='prev')big+=.03;
   if(R()<.011+(dc==='goal'||dc==='c0'?.006:0))return {kind:'fum',yds:ri(-2,3),c,scoop:R()<.09};
@@ -3165,7 +3198,7 @@ function runRoll(side,pk,dc){
 function buildRun(P){
   const pl=PB[P.pk],p=pl.run,los=P.los,bx=P.bx,sp=P.spots,f=FORMS[P.form];
   const r=runRoll(P.side,P.pk,P.dc);P.run=r;
-  let ps=P.ps;if(P.pk==='jet')ps=P.ps=sp.S[0]<bx?1:-1;
+  let ps=P.ps;if(P.pk==='jet')ps=P.ps=sp.S[0]<bx?1:-1;if(P.pk==='reverse')ps=P.ps=sp.Z[0]>bx?-1:1;
   const uc=f.qb>-2,A=k=>[sp[k][0],los+sp[k][1]];
   for(const k of ['X','Z','S','S2','TE'])if(sp[k]&&k!==r.c){const [x,y]=A(k);P.paths[k]=k==='TE'?[[0,x,y],[.6,x,y+1.2],[4,x,y+1.6]]:[[0,x,y],[1,x,y+4],[4,x+(bx-x)*.1,y+5.5]]}
   const yEnd=Math.min(104,los+r.yds);P.td=los+r.yds>=100;
@@ -3183,7 +3216,24 @@ function buildRun(P){
     const mesh=uc?[bx+ps*1.1,los-3.3]:[bx+ps*.5,los-4.2];
     P.paths.QB=uc?[[0,q[0],q[1]],[.4,bx+ps*.9,los-3.1],[1.2,bx-ps*.5,los-4],[6,bx-ps*.5,los-4]]:dl?[[0,q[0],q[1]],[.6,bx,los-6.4],[1.1,bx,los-5.6],[6,bx,los-5.6]]:[[0,q[0],q[1]],[.5,bx,los-4.8],[6,bx,los-5]];
     if(sp.FB){const fb=A('FB');P.paths.FB=[[0,fb[0],fb[1]],[th+.15,hole[0]-ps*.6,los-.6],[th+.8,hole[0]+ps*.4,los+2.2],[6,hole[0]+ps*.6,los+2.6]]}
-    if(r.c==='QB'&&P.pk==='qbdraw'){
+    if(P.pk==='reverse'){
+      const z=A('Z');th=1.5;hole=[clamp(bx+ps*p.hole,2,51.3),los+.6];
+      P.paths.QB=[[0,q[0],q[1]],[.5,bx-ps*1.4,los-5.2],[1.5,bx-ps*.9,los-5.4],[6,bx-ps*.9,los-5.4]];
+      P.paths.RB=[[0,rb[0],rb[1]],[.55,bx-ps*2.4,los-4.5],[1.5,bx-ps*7.5,los-1.6],[6,bx-ps*8.5,los-.6]];
+      pre=[[0,z[0],z[1]],[.4,z[0]+ps*2,z[1]-2.6],[th,bx-ps*.2,los-6]];
+    }else if(P.pk==='speedopt'){
+      hole=[clamp(bx+ps*(r.c==='QB'?6.5:p.hole),2,51.3),los+.5];
+      const qp=[[0,q[0],q[1]],[.35,bx+ps*.6,los-4.3],[1,bx+ps*5,los-2.6]],rp=[[0,rb[0],rb[1]],[.3,rb[0]+ps*1.5,rb[1]+.2],[1,bx+ps*9.2,los-4.4]];
+      if(r.c==='QB'){th=.3;pre=qp;P.paths.RB=[...rp,[1.9,bx+ps*13.5,los-1.2],[6,bx+ps*14.5,los]]}
+      else{th=1;P.pitch=.3;pre=rp;P.paths.QB=[...qp,[1.5,bx+ps*5.8,los-1.6],[6,bx+ps*6,los-1.2]]}
+    }else if(P.pk==='qbpower'){
+      th=.4;pre=[[0,q[0],q[1]],[.4,bx,los-4.7],[.75,bx+ps*.8,los-4.2]];
+      P.paths.RB=[[0,rb[0],rb[1]],[.5,hole[0]-ps*.8,los-2.2],[1.15,hole[0]+ps*.5,los+1.8],[6,hole[0]+ps*.8,los+2.6]];
+    }else if(r.c==='FB'){
+      const fb=A('FB');th=.38;pre=[[0,fb[0],fb[1]],[th,bx+ps*.5,los-2.3]];
+      P.paths.QB=[[0,q[0],q[1]],[.32,bx+ps*.35,los-1.9],[1.1,bx-ps*.6,los-4],[6,bx-ps*.6,los-4]];
+      P.paths.RB=[[0,rb[0],rb[1]],[.6,bx-ps*1.6,los-5.2],[1.5,bx-ps*6.5,los-3.6],[6,bx-ps*7.5,los-3.2]];
+    }else if(r.c==='QB'&&P.pk==='qbdraw'){
       th=1.15;pre=[[0,q[0],q[1]],[.6,bx,los-7.2],[1.15,bx+ps*.3,los-6.4]];hole=[clamp(bx+ps*1.2,2,51.3),los+.6];
       P.paths.RB=[[0,rb[0],rb[1]],[.5,bx+ps*1.8,los-4.4],[6,bx+ps*2,los-4.2]];
     }else if(r.c==='QB'){
@@ -3214,13 +3264,17 @@ function buildPass(P){
    deep:uc?[[0,q[0],q[1]],[1,bx,los-8.2]]:[[0,q[0],q[1]],[.75,bx,los-8.4]],
    pa:[[0,q[0],q[1]],[.45,bx+1.1,los-3.3],[1.2,bx+.2,los-7.6]],
    boot:[[0,q[0],q[1]],[.45,bx-1.1,los-3.3],[1.35,bx+6,los-6.6],[2.4,bx+9.5,los-5.2]],
-   screen:uc?[[0,q[0],q[1]],[1.2,bx,los-8]]:[[0,q[0],q[1]],[.6,bx,los-7.5],[1.3,bx,los-9.5]]
-  }[drop];
+   screen:uc?[[0,q[0],q[1]],[1.2,bx,los-8]]:[[0,q[0],q[1]],[.6,bx,los-7.5],[1.3,bx,los-9.5]],
+   rpo:[[0,q[0],q[1]],[.5,bx+.5,los-4.5],[.9,bx+.3,los-5]],
+   sprint:[[0,q[0],q[1]],[.55,bx+2.2,los-6.6],[1.6,bx+8,los-5.8],[2.6,bx+10.5,los-4.6]],
+   flea:[[0,q[0],q[1]],[.45,bx+1.1,los-3.3],[1.05,bx-.5,los-5.6],[1.75,bx-.8,los-8.4]]
+  }[drop];if(drop==='flea')P.minT=2;
   const ql=qbp[qbp.length-1];qbp.push([9,ql[1],ql[2]]);P.paths.QB=qbp;
   for(const k of ['X','Z','S','S2','TE','RB','FB']){
     if(!sp[k])continue;const st=[sp[k][0],los+sp[k][1]],rk=pl.routes[k];
     if(!rk||!RT[rk]){
-      if(k==='RB'||k==='FB'){const sd=st[0]<=bx?-1:1;P.paths[k]=(drop==='pa'||drop==='boot')?[[0,st[0],st[1]],[.45,bx-sd*1.2,los-3.4],[1.1,bx+sd*1.5,los-1.8],[9,bx+sd*1.5,los-1.6]]:[[0,st[0],st[1]],[.55,bx+sd*1.7,los-4.4],[9,bx+sd*1.9,los-4.6]]}
+      if(drop==='flea'&&k==='RB'){P.paths[k]=[[0,st[0],st[1]],[.5,bx+1.2,los-3.5],[1.15,bx+2.1,los-1.9],[1.5,bx+2.1,los-1.9],[2.4,bx+2.6,los-3.4],[9,bx+2.6,los-3.6]];continue}
+      if(k==='RB'||k==='FB'){const sd=st[0]<=bx?-1:1;P.paths[k]=(drop==='pa'||drop==='boot'||drop==='rpo'||drop==='flea')?[[0,st[0],st[1]],[.45,bx-sd*1.2,los-3.4],[1.1,bx+sd*1.5,los-1.8],[9,bx+sd*1.5,los-1.6]]:[[0,st[0],st[1]],[.55,bx+sd*1.7,los-4.4],[9,bx+sd*1.9,los-4.6]]}
       else P.paths[k]=k==='TE'?[[0,st[0],st[1]],[.5,st[0],st[1]-.7],[9,st[0],st[1]-1]]:[[0,st[0],st[1]],[1,st[0],st[1]+3],[9,st[0],st[1]+3]];
       continue;
     }
@@ -3228,18 +3282,19 @@ function buildPass(P){
     const rp=routePath(st,rk,ins,k==='TE'?6.7:back?7.2:7.9);P.paths[k]=rp.pts;
     const c=RT[rk].c;let o0=.44+COV[dc][c]+(RT[rk].od||0)+e*.028+gauss()*.09+(R()<.07?.3:0);
     if(drop==='pa'||drop==='boot'){if(runShare(P.side)>.5)o0+=.07;if(dc==='goal')o0+=.05}
+    if(drop==='flea'){o0+=DC[dc].run<0?.15:.04;if(runShare(P.side)>.5)o0+=.05}
     if(100-los<15&&(c==='deepI'||c==='deepO'))o0-=.08;
     P.recv.push({slot:k,rk,c,path:rp.pts,tb:rp.tb,o0});
   }
-  P.tp=clamp(DC[dc].tp+e*.12+gauss()*.3+((drop==='pa'||drop==='boot')?.3:0)+(drop==='screen'?.5:0),1.25,5);
+  P.tp=clamp(DC[dc].tp+e*.12+gauss()*.3+((drop==='pa'||drop==='boot')?.3:0)+(drop==='screen'?.5:0)+(drop==='sprint'?.25:0)+(drop==='flea'?1:0),1.25,5);
   P.ts=P.tp+.8;
 }
 function assignD(P){
   const dsp=dspots(P.dc,P.bx,P.spots);P.dsp=dsp;
-  const rush=rushersOf(P.dc),roles={};rush.forEach(k=>roles[k]={m:'rush'});
+  const rush=rushersOf(P.dc),roles={};rush.forEach(k=>roles[k]={m:'rush'});if(P.dc==='spy')roles.LB2={m:'spy'};
   if(!P.isRun){
     const recs=[...P.recv].sort((a,b)=>P.spots[a.slot][0]-P.spots[b.slot][0]);
-    if(recs.length){roles.CB1={m:'cover',r:recs[0].slot};if(recs.length>1)roles.CB2={m:'cover',r:recs[recs.length-1].slot}}
+    if(recs.length){roles[roles.CB1?'FS':'CB1']={m:'cover',r:recs[0].slot};if(recs.length>1)roles.CB2={m:'cover',r:recs[recs.length-1].slot}}
     for(const rc of recs.slice(1,-1)){let best=null;for(const k of ['LB1','LB3','SS','LB2','FS','DE2']){if(roles[k])continue;const d=Math.abs(dsp[k][0]-P.spots[rc.slot][0]);if(!best||d<best.d)best={k,d}}if(best)roles[best.k]={m:'cover',r:rc.slot}}
   }
   for(const k of DSLOTS)if(!roles[k])roles[k]={m:'zone'};
@@ -3296,15 +3351,15 @@ function throwRes(P,i,t){
 function sackRes(P){const lost=R()<.05;return {kind:'sack',yds:-ri(4,9),lost,scoop:lost&&R()<.12,by:P.sacker}}
 function scrRes(P,t){
   const e=effE(P.side,true);let m=3.4+e*.5+((P.dc==='c1'||P.dc==='c0')?2.5:0)+(P.dc==='prev'?2:0)-(t>P.tp?1.2:0);
-  let y=Math.round(m+gauss()*3.6);if(R()<.06)y+=ri(10,35);y=Math.max(y,-3);
+  let y=Math.round(m+gauss()*3.6);if(R()<.06)y+=ri(10,35);if(P.dc==='spy')y=Math.min(y-2,6);y=Math.max(y,-3);
   return {kind:'scr',yds:y,oob:y>4&&R()<((G&&!G.ot&&(G.q===2||G.q===4)&&G.clock<=150)?.45:.15)};
 }
 /* each play's designed first read gets a bump, so the QB throws what the play is built for */
-const PRI={screen:{s:'RB',b:11},bubble:{s:'S',b:8},tunnel:{s:'X',b:10},stick:{s:'TE',b:3},slants:{s:'X',b:2},mesh:{s:'S',b:3},curlflat:{s:'S',b:2.5},smash:{s:'S',b:2},sail:{s:'S',b:3},boot:{s:'TE',b:2},verts:{s:'S',b:2},pashot:{s:'X',b:2},dagger:{s:'X',b:3},wheel:{s:'RB',b:4},levels:{s:'X',b:2},ycross:{s:'TE',b:4},fade:{s:'X',b:1},shallow:{s:'S',b:3},sluggo:{s:'X',b:3},hitchseam:{s:'S',b:3}};
+const PRI={rpo:{s:'X',b:4},sprint:{s:'Z',b:3},texas:{s:'RB',b:4.5},tescreen:{s:'TE',b:10},yankee:{s:'Z',b:3},switchv:{s:'S',b:3},flea:{s:'X',b:4},screen:{s:'RB',b:11},bubble:{s:'S',b:8},tunnel:{s:'X',b:10},stick:{s:'TE',b:3},slants:{s:'X',b:2},mesh:{s:'S',b:3},curlflat:{s:'S',b:2.5},smash:{s:'S',b:2},sail:{s:'S',b:3},boot:{s:'TE',b:2},verts:{s:'S',b:2},pashot:{s:'X',b:2},dagger:{s:'X',b:3},wheel:{s:'RB',b:4},levels:{s:'X',b:2},ycross:{s:'TE',b:4},fade:{s:'X',b:1},shallow:{s:'S',b:3},sluggo:{s:'X',b:3},hitchseam:{s:'S',b:3}};
 function autoThrow(P,noise){
-  if(R()<clamp(.09-(P.tp-1.9)*.035,.012,.13))return {sack:1,t:P.ts};
+  if(R()<clamp(.09-(P.tp-1.9)*.035,.012,.13)+(P.minT?.05:0))return {sack:1,t:P.ts};
   let best=null;
-  for(let t=.45;t<P.ts-.05;t+=.15){
+  for(let t=P.minT||.45;t<P.ts-.05;t+=.15){
     const pres=t>P.tp;
     for(let i=0;i<P.recv.length;i++){
       const r=P.recv[i];if(t<(RT[r.rk].delay||0)+.3)continue;
@@ -3317,7 +3372,7 @@ function autoThrow(P,noise){
       if((r.c==='deepO'||r.c==='deepI')&&air<14)v-=4.5;
       v+=pc*({quick:2.6,flat:3.4,mid:2,cross:3.6,deepI:3,deepO:2.4,screen:5.5}[r.c]||0)*(.3+o)*.8;
       if(air>=14&&!(pr&&pr.s===r.slot)&&v>0)v*=.8;
-      {const hi={quick:1.05,normal:1.8,deep:2.4,screen:1.5,boot:2.1,pa:2.3}[PB[P.pk].drop]||1.8;if(t>hi)v-=(t-hi)*3.2}
+      {const hi={quick:1.05,normal:1.8,deep:2.4,screen:1.5,boot:2.1,pa:2.3,rpo:1.1,sprint:2.2,flea:3.3}[PB[P.pk].drop]||1.8;if(t>hi)v-=(t-hi)*3.2}
       if(r.c==='hail')v=G.clock<=10&&(G.q===2||G.q===4)?30+gauss():-9;
       if(!best||v>best.v)best={i,t,v};
     }
@@ -3347,7 +3402,7 @@ function gradeCall(pk,dc){
 function applyResult(side,pk,dc,r){
   const opp=other(side),D=G.box[side],qb=nmS(side,'QB'),isU=side==='u';
   G.mom=(G.mom||0)*.93;G.recap=null;
-  const cat=PB[pk]?PB[pk].cat:null;
+  const cat=PB[pk]?(PB[pk].rpo?(r.kind==='run'||(r.kind==='fum'&&r.c)?'run':'pass'):PB[pk].cat):null;
   if(cat)G.calls.push({side,call:cat});
   G.drive.n++;
   const grade=cat&&dc?gradeCall(pk,dc):null;
@@ -3378,11 +3433,12 @@ function applyResult(side,pk,dc,r){
     const who=r.kind==='scr'?qb:nmS(side,r.c);D.rush+=y;
     if(isU&&r.kind==='run'&&r.c==='RB'){G.st.rb.car++;G.st.rb.yds+=y;if(td)G.st.rb.td++}
     if(r.kind==='scr')txt=qb+' scrambles '+(y>0?'for '+y:y===0?'for no gain':'and loses '+(-y))+(r.oob?', out of bounds.':'.');
-    else txt=y>=15?who+' breaks free for '+y+' yards!':y>0?who+' '+(PB[pk].run.edge?'around the edge':'up the middle')+' for '+y+(r.oob?', out of bounds.':'.'):y===0?who+' stuffed at the line.':who+' dropped for a loss of '+(-y)+'.';
+    else txt=y>=15?who+' breaks free for '+y+' yards!':y>0?who+' '+(pk==='speedopt'&&r.c==='RB'?'takes the pitch':pk==='reverse'?'on the reverse':PB[pk].run.edge?'around the edge':'up the middle')+' for '+y+(r.oob?', out of bounds.':'.'):y===0?who+' stuffed at the line.':who+' dropped for a loss of '+(-y)+'.';
+    if(pk==='reverse'&&y>=15)txt='Reverse! '+txt;
   }else if(r.kind==='comp'||r.kind==='inc'){
     const rc=r.target?nmS(side,r.target):'';
     if(isU){G.st.qb.att++;if(r.kind==='comp'){G.st.qb.cmp++;G.st.qb.yds+=y;if(td)G.st.qb.td++;if(r.target==='X'){G.st.wr.rec++;G.st.wr.yds+=y;if(td)G.st.wr.td++}}}
-    if(r.kind==='comp'){D.pass+=y;txt=y>=20?qb+' hits '+rc+' for '+y+' yards!':qb+' finds '+rc+' for '+y+'.'}
+    if(r.kind==='comp'){D.pass+=y;txt=y>=20?qb+' hits '+rc+' for '+y+' yards!':qb+(pk==='rpo'?' pulls it and finds ':' finds ')+rc+' for '+y+'.';if(pk==='flea')txt='Flea flicker! '+txt}
     else txt=r.away?qb+' throws it away.':qb+' incomplete, intended for '+rc+'.';
   }else if(r.kind==='sack'){txt=qb+' sacked by '+nmS(opp,r.by)+' for a loss of '+(-y)+'.';mo(opp,8);if(side===homeSide())SC.hype=.1;else SC.hype=1}
   D.yds+=y;
@@ -3565,9 +3621,9 @@ function fourthAI(side){
   if(t<=1&&G.ball>=30&&R()<ag*.35)return 'go';
   return 'punt';
 }
-const IDPLAYS={air:['mesh','verts','levels','stick','sail','tunnel','shallow','hitchseam','slants','bubble'],ground:['power','iz','counter','iso','trap','toss','stretch','sneak'],balanced:['pashot','boot','curlflat','iz','counter','smash','levels'],clock:['iz','power','stick','curlflat','screen','iso','slants','shallow'],shootout:['verts','dagger','sluggo','jet','bubble','pashot','wheel','tunnel'],defense:['iz','power','screen','stick','trap','curlflat','iso']};
+const IDPLAYS={air:['mesh','verts','levels','stick','sail','tunnel','shallow','hitchseam','slants','bubble','texas','switchv','sprint'],ground:['power','iz','counter','iso','trap','toss','stretch','sneak','gtcounter','qbpower','fbdive','speedopt'],balanced:['pashot','boot','curlflat','iz','counter','smash','levels','yankee','rpo','sprint'],clock:['iz','power','stick','curlflat','screen','iso','slants','shallow','rpo','fbdive'],shootout:['verts','dagger','sluggo','jet','bubble','pashot','wheel','tunnel','switchv','rpo','reverse','flea'],defense:['iz','power','screen','stick','trap','curlflat','iso','qbpower','tescreen']};
 function offAI(side,allowKick=true){
-  if(G.pat2)return wpick({power:8,iz:5,qbdraw:4,option:4,slants:7,stick:6,fade:6,mesh:4,bubble:3,boot:3});
+  if(G.pat2)return wpick({power:8,iz:5,qbdraw:4,option:4,slants:7,stick:6,fade:6,mesh:4,bubble:3,boot:3,qbpower:3,sprint:3,speedopt:2});
   const me=side==='u'?G.su:G.sc,th=side==='u'?G.sc:G.su,diff=me-th,toGoal=100-G.ball,kn=Math.max(38,clockBase()*1.5);
   if(!G.ot&&G.q===4&&diff>0&&G.clock<=(5-G.down-(G.to[other(side)]||0))*kn+(G.to[other(side)]||0)*4)return 'kneel';
   if(!G.ot&&G.q===2&&G.clock<=20&&G.ball<55&&G.down<4)return 'kneel';
@@ -3579,31 +3635,31 @@ function offAI(side,allowKick=true){
   if(tm&&G.lastRun>0&&G.down<=2&&((G.to[side]===0&&G.clock<=70)||(G.clock<=30&&G.to[side]<=1)))return 'spike';
   if(!G.ot&&(G.q===2||G.q===4)&&G.lastRun>0&&G.down<=3&&G.to[side]===0&&SX.dist<=50&&G.clock<=16&&G.clock>4&&(G.q===2||(diff<=0&&diff>=-3)))return 'spike';
   const st=side==='c'?team(G.opp).style:'bal',t=G.togo,d=G.down;
-  const w={iz:9,power:6,counter:5,stretch:5,option:5,draw:4,jet:4,sneak:0,toss:5,trap:5,qbdraw:3,slants:7,stick:6,screen:4,mesh:6,curlflat:6,smash:5,sail:5,boot:5,verts:4,pashot:4,dagger:5,bubble:5,wheel:3,levels:5,ycross:4,fade:2,hail:0,tunnel:3,shallow:5,sluggo:2,hitchseam:4,iso:4};
-  if(d>=3&&t>=7){for(const k of RUNS)w[k]*=.25;w.draw+=3;w.screen+=3;w.mesh+=6;w.sail+=5;w.smash+=4;w.verts+=6;w.curlflat+=3;w.slants*=.6;w.stick*=.4;w.qbdraw+=2;w.dagger+=5;w.levels+=4;w.ycross+=6;w.bubble*=.5;w.fade*=.5}
-  else if(t<=2){w.iz+=8;w.power+=12;w.sneak+=t<=1?14:4;w.stick+=6;w.slants+=4;w.verts*=.3;w.pashot*=.4;w.screen*=.5;w.draw*=.5;w.trap+=5;w.toss*=.6;w.wheel*=.3;w.ycross*=.3;w.fade*=.4}
+  const w={iz:9,power:6,counter:5,stretch:5,option:5,draw:4,jet:4,sneak:0,toss:5,trap:5,qbdraw:3,slants:7,stick:6,screen:4,mesh:6,curlflat:6,smash:5,sail:5,boot:5,verts:4,pashot:4,dagger:5,bubble:5,wheel:3,levels:5,ycross:4,fade:2,hail:0,tunnel:3,shallow:5,sluggo:2,hitchseam:4,iso:4,gtcounter:4,fbdive:1,speedopt:3,qbpower:2,reverse:.7,rpo:5,sprint:4,texas:4,tescreen:2.5,yankee:3.5,switchv:3,flea:.5};
+  if(d>=3&&t>=7){for(const k of RUNS)w[k]*=.25;w.draw+=3;w.screen+=3;w.mesh+=6;w.sail+=5;w.smash+=4;w.verts+=6;w.curlflat+=3;w.slants*=.6;w.stick*=.4;w.qbdraw+=2;w.dagger+=5;w.levels+=4;w.ycross+=6;w.bubble*=.5;w.fade*=.5;w.texas+=3;w.switchv+=3;w.sprint+=2;w.rpo*=.4;w.flea*=.5}
+  else if(t<=2){w.iz+=8;w.power+=12;w.sneak+=t<=1?14:4;w.stick+=6;w.slants+=4;w.verts*=.3;w.pashot*=.4;w.screen*=.5;w.draw*=.5;w.trap+=5;w.toss*=.6;w.wheel*=.3;w.ycross*=.3;w.fade*=.4;w.fbdive+=6;w.qbpower+=5;w.sprint+=2;w.reverse*=.3;w.flea=0;w.switchv*=.3;w.yankee*=.4}
   else if(d===1){w.pashot+=2;w.boot+=2}
-  if(toGoal<=12){w.verts*=.3;w.pashot*=.2;w.sail*=.6;w.power+=4;w.slants+=3;w.smash+=3;w.fade+=7;w.ycross*=.4;w.dagger*=.5;w.wheel*=.5;w.qbdraw+=2}
-  if(autoSide(side)){const ik=identOf(side==='u'?GU():G.opp).k;for(const k of (IDPLAYS[ik]||[]))if(w[k]!=null)w[k]*=1.8;const M=IDm(side==='u'?GU():G.opp);for(const k of RUNS)w[k]*=M.run;for(const k of PASSES)w[k]*=M.pass;for(const k of ['verts','pashot','dagger','sail','fade','wheel'])w[k]*=M.deep;if(M===IDENT.clock){w.slants*=1.2;w.stick*=1.25;w.curlflat*=1.2;w.screen*=1.3}}
+  if(toGoal<=12){w.verts*=.3;w.pashot*=.2;w.sail*=.6;w.power+=4;w.slants+=3;w.smash+=3;w.fade+=7;w.ycross*=.4;w.dagger*=.5;w.wheel*=.5;w.qbdraw+=2;w.qbpower+=3;w.sprint+=3;w.speedopt+=1;w.flea=0;w.yankee*=.2;w.switchv*=.4;w.reverse*=.5}
+  if(autoSide(side)){const ik=identOf(side==='u'?GU():G.opp).k;for(const k of (IDPLAYS[ik]||[]))if(w[k]!=null)w[k]*=1.8;const M=IDm(side==='u'?GU():G.opp);for(const k of RUNS)w[k]*=M.run;for(const k of PASSES)w[k]*=M.pass;for(const k of ['verts','pashot','dagger','sail','fade','wheel','yankee','switchv','flea'])w[k]*=M.deep;if(M===IDENT.clock){w.slants*=1.2;w.stick*=1.25;w.curlflat*=1.2;w.screen*=1.3}}
   else{if(st==='run')for(const k of RUNS)w[k]*=1.5;if(st==='pass')for(const k of PASSES)w[k]*=1.35}
   if(!G.ot&&(SX.urgent||(G.q===2&&G.clock<G.qlen*.3&&G.poss===side))){
     const big=SX.need>=2||(SX.secs<90&&SX.need>=1);
-    for(const k of RUNS)w[k]*=big?.12:.35;w.draw+=2;w.sail*=1.8;w.smash*=1.4;w.mesh*=1.3;w.dagger*=1.5;w.levels*=1.3;w.verts*=big?2.4:1.6;w.ycross*=1.5;w.screen*=.6;w.bubble*=.6;
+    for(const k of RUNS)w[k]*=big?.12:.35;w.draw+=2;w.sail*=1.8;w.smash*=1.4;w.mesh*=1.3;w.dagger*=1.5;w.levels*=1.3;w.verts*=big?2.4:1.6;w.ycross*=1.5;w.screen*=.6;w.bubble*=.6;w.tescreen*=.6;w.switchv*=1.4;w.flea=0;
   }else if(!G.ot&&G.q===4&&G.clock<G.qlen*.4&&diff>0){for(const k of RUNS)w[k]*=2.5;for(const k of PASSES)w[k]*=.4}
   // in range, game tied or within a field goal, little time: bleed it safely, then kick
   if(!G.ot&&G.q===4&&diff<=0&&diff>=-3&&SX.dist<=44&&G.clock<70){for(const k of PASSES)w[k]*=.15;w.iz*=2.5;w.power*=2;w.sneak+=4;w.stretch*=.3;w.toss*=.3;w.jet*=.3}
-  if(tm){for(const k of RUNS)w[k]*=.06;if(G.clock>70&&G.to[side]>=2)w.draw=3;w.curlflat*=2.2;w.smash*=1.9;w.sail*=2.2;w.stick*=1.2;w.dagger*=1.5;w.levels*=1.2;w.verts*=1.5;w.wheel*=1.8;w.fade*=1.3;w.mesh*=.7;w.ycross*=.7;w.slants*=.7;w.screen*=.35;w.bubble*=.8;
+  if(tm){for(const k of RUNS)w[k]*=.06;if(G.clock>70&&G.to[side]>=2)w.draw=3;w.curlflat*=2.2;w.smash*=1.9;w.sail*=2.2;w.stick*=1.2;w.dagger*=1.5;w.levels*=1.2;w.verts*=1.5;w.wheel*=1.8;w.fade*=1.3;w.mesh*=.7;w.ycross*=.7;w.slants*=.7;w.screen*=.35;w.bubble*=.8;w.tescreen*=.35;w.flea=0;w.rpo*=.5;w.sprint*=1.3;
     if(toGoal>40&&G.clock<=25){w.verts*=2.2;w.dagger*=1.6;w.sail*=1.5;w.curlflat*=.5;w.stick*=.4}}
   w.hail=0;
   return wpick(w);
 }
 function defAI(defSide){
   const off=other(defSide),rs=runShare(off),d=G.down,t=G.togo,toGoal=100-G.ball;
-  const w={c2:12,c3:16,c4:11,c1:11,c0:5,fire:9,goal:2,prev:0,c2m:8,tampa:8};
-  if(rs>.6){w.goal+=10;w.c3+=8;w.c1+=6;w.c0+=4}else if(rs<.35){w.c4+=10;w.c2+=8;w.fire+=6}
-  if(d>=3&&t>=8){w.c4+=10;w.fire+=8;w.c0+=5;w.c2+=6;w.c2m+=6;w.tampa+=5;w.goal=0;if(t>=14)w.prev+=8}
-  if(t<=2){w.goal+=26;w.c0+=8;w.c1+=6;w.prev=0;w.c4*=.4}
-  if(toGoal<=10){w.goal+=8;w.c1+=10;w.c0+=4;w.c4*=.5;w.prev=0}
+  const w={c2:12,c3:16,c4:11,c1:11,c0:5,fire:9,goal:2,prev:0,c2m:8,tampa:8,c6:7,spy:4,cblitz:4,bear:3};
+  if(rs>.6){w.goal+=10;w.c3+=8;w.c1+=6;w.c0+=4;w.bear+=7}else if(rs<.35){w.c4+=10;w.c2+=8;w.fire+=6;w.c6+=5;w.cblitz+=3;w.bear=1}
+  if(d>=3&&t>=8){w.c4+=10;w.fire+=8;w.c0+=5;w.c2+=6;w.c2m+=6;w.tampa+=5;w.goal=0;w.c6+=5;w.spy+=4;w.cblitz+=4;w.bear=0;if(t>=14)w.prev+=8}
+  if(t<=2){w.goal+=26;w.c0+=8;w.c1+=6;w.prev=0;w.c4*=.4;w.bear+=8;w.c6*=.4}
+  if(toGoal<=10){w.goal+=8;w.c1+=10;w.c0+=4;w.c4*=.5;w.prev=0;w.spy+=3;w.c6*=.5}
   const om=off==='u'?G.su:G.sc,ot=off==='u'?G.sc:G.su;
   if(!G.ot&&G.q===4&&G.clock<G.qlen*.4){if(om<ot&&ot-om<=8){w.prev+=G.clock<60?40:12;w.c4+=10;w.goal=0}else if(om>ot){w.goal+=10;w.c3+=6}}
   if(!G.ot&&G.q===2&&G.clock<30&&toGoal>40)w.prev+=25;
@@ -5664,7 +5720,9 @@ function controls(){
       return '<section class="card"><div class="spread"><div><span class="eyebrow">'+FORMS[pl.f].n+'</span><h2>'+pl.n+'</h2></div><button class="btn ghost small" data-act="audible">Audible</button></div><p class="muted" style="font-size:13px">'+esc(pl.d)+'</p><button class="btn huge" data-act="snap">Snap</button></section>';
     }
     const tab=S.pbTab||'pass',rows=G.recap?recapHTML():'';
-    const list=tab==='run'?RUNS:tab==='pass'?PASSES.filter(k=>k!=='hail'||G.clock<60||100-G.ball>40):[];
+    const grp=PBG[tab],sub=grp?(grp.find(x=>x[0]===PBSUB[tab])||grp.find(x=>x[2].includes(G.sug))||grp[0]):null;
+    const list=sub?sub[2].filter(k=>PB[k]&&(k!=='hail'||G.clock<60||100-G.ball>40)):[];
+    const subRow=grp?'<div class="pbsub">'+grp.map(x=>'<button data-act="pbsub" data-t="'+tab+'" data-g="'+x[0]+'" aria-pressed="'+(x===sub)+'">'+x[1]+(x[2].includes(G.sug)?'<i></i>':'')+'</button>').join('')+'</div>':'';
     let cards=list.map(k=>{const p=PB[k];return '<button class="call'+(G.sug===k?' sug':'')+'" data-act="call" data-k="'+k+'"><span class="f">'+FORMS[p.f].n+(G.sug===k?' · OC pick':'')+'</span><b>'+p.n+'</b><span>'+esc(p.d)+'</span></button>'}).join('');
     if(tab==='spec'){
       const toGoal=100-G.ball,dist=toGoal+17,q4=(G.q===4||G.q===2)&&!G.ot;
@@ -5676,7 +5734,7 @@ function controls(){
     const canTO=!G.ot&&G.to.u>0&&G.lastRun>0&&G.clock>0;
     return rows+'<section class="card"><div class="spread"><h3>'+(G.pat2?'Two-point try: call the play':'Call the play')+'</h3>'+(G.sug?'<span class="muted" style="font-size:12px">OC likes: '+(PB[G.sug]?PB[G.sug].n:G.sug==='fg'?'Field goal':G.sug==='punt'?'Punt':G.sug)+'</span>':'')+'</div>'+
       '<div class="pbtabs">'+[['run','Run'],['pass','Pass'],['spec','Special']].map(([k,n])=>'<button data-act="pb" data-t="'+k+'" aria-pressed="'+(tab===k)+'">'+n+'</button>').join('')+'</div>'+
-      '<div class="calls">'+cards+'</div>'+
+      subRow+'<div class="calls">'+cards+'</div>'+
       '<div><p class="eyebrow" style="margin-bottom:6px">Tempo</p><div class="seg">'+[['hurry','Hurry-up','Fast snap'],['normal','Normal','Standard'],['milk','Bleed clock','Run it down']].map(([k,n,s])=>'<button data-act="tempo" data-t="'+k+'" aria-pressed="'+(G.tempo===k)+'">'+n+'<small>'+s+'</small></button>').join('')+'</div></div>'+
       (canTO?'<button class="btn ghost small" data-act="timeout">Timeout · save '+fmtClock(G.lastRun)+'</button>':'')+simRow+toggles+'</section>';
   }
@@ -5685,7 +5743,8 @@ function controls(){
     const cs=G.calls.filter(c=>c.side==='c'),runs=cs.filter(c=>c.call==='run').length;
     return '<section class="card"><div class="spread"><h3>'+(G.pat2?'Stop the two-point try':'Call the defense')+'</h3><span class="muted" style="font-size:12px">'+o.abbr+' today: '+runs+' run, '+(cs.length-runs)+' pass</span></div>'+
       (G.down===4?'<p class="chip amber" style="align-self:flex-start">'+o.abbr+' is going for it on 4th</p>':'')+
-      '<div class="calls">'+Object.keys(DC).map(k=>'<button class="call" data-act="dcall" data-k="'+k+'"><b>'+DC[k].n+'</b><span>'+DC[k].d+'</span></button>').join('')+'</div>'+simRow+toggles+'</section>';
+      '<div class="pbsub">'+PBG.def.map(x=>'<button data-act="pbsub" data-t="def" data-g="'+x[0]+'" aria-pressed="'+(x[0]===(PBSUB.def||'zone'))+'">'+x[1]+'</button>').join('')+'</div>'+
+      '<div class="calls">'+(PBG.def.find(x=>x[0]===PBSUB.def)||PBG.def[0])[2].map(k=>'<button class="call" data-act="dcall" data-k="'+k+'"><b>'+DC[k].n+'</b><span>'+DC[k].d+'</span></button>').join('')+'</div>'+simRow+toggles+'</section>';
   }
   return '';
 }
@@ -5856,6 +5915,7 @@ function act(a,d){
     case 'advance':advance();break;
     case 'in':if(G.phase==='coin'){if(G.cheer>performance.now())return;if(openCheer(()=>{doInput(d.a);afterCommit()}))return}doInput(d.a);afterCommit();return;
     case 'pb':S.pbTab=d.t;break;
+    case 'pbsub':PBSUB[d.t]=d.g;break;
     case 'call':{
       const k=d.k;
       if(G.pat2&&(k==='punt'||k==='fg'||k==='kneel'||k==='spike'))return;

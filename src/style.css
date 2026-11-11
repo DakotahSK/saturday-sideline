@@ -126,6 +126,10 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--amber);outline-
 .pbtabs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .pbtabs button{background:var(--panel2);border:1.5px solid var(--line);border-radius:6px;padding:8px;font-family:var(--display);font-weight:800;font-size:16px;letter-spacing:.06em;text-transform:uppercase}
 .pbtabs button[aria-pressed="true"]{border-color:var(--amber);color:var(--amber)}
+.pbsub{display:flex;gap:5px}
+.pbsub button{flex:1 1 0;min-width:0;background:none;border:1.5px solid var(--line);border-radius:999px;padding:6px 2px;font-size:12px;font-weight:700;color:var(--muted);white-space:nowrap;position:relative}
+.pbsub button[aria-pressed="true"]{border-color:var(--amber);color:var(--amber);background:rgba(242,184,75,.08)}
+.pbsub button i{position:absolute;top:-3px;right:4px;width:7px;height:7px;border-radius:50%;background:var(--amber)}
 .calls{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .call{text-align:left;background:var(--panel2);border:1.5px solid var(--line);border-radius:8px;padding:10px 11px;display:flex;flex-direction:column;gap:3px;min-width:0;position:relative}
 .call b{font-family:var(--display);font-weight:800;font-size:18px;text-transform:uppercase;letter-spacing:.03em;line-height:1.05}
