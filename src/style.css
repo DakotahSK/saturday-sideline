@@ -592,7 +592,10 @@ div.bbox{cursor:default}
 #app.hub .tbl tr.me td:first-child{box-shadow:inset 3px 0 0 var(--amber)}
 .pgs-stand .tbl td:first-child{max-width:0;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pgs-poll .tbl td:first-child{font-family:var(--mono);font-weight:700;color:var(--muted);width:26px}
-.pgs-poll .tbl tr:nth-child(-n+4) td:first-child{color:var(--amber)}
+#app.hub .pgs-poll .tbl{table-layout:fixed}
+.pgs-poll .tbl th:nth-child(1){width:26px}.pgs-poll .tbl th:nth-child(3){width:50px}.pgs-poll .tbl th:nth-child(4){width:88px}
+#app.hub .pgs-poll .tbl td:last-child{font-family:var(--body);font-size:12px;overflow:hidden;text-overflow:ellipsis}
+.pgs-poll .tcell{min-width:0}
 .pgs-poll .tcell .lnk{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 #app.hub .sched .g{min-height:44px;padding:8px 0;box-sizing:border-box}
 #app.hub .sched .g.cur{box-shadow:inset 3px 0 0 var(--amber);padding-left:8px}

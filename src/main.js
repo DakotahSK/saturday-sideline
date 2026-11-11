@@ -5388,13 +5388,13 @@ function slateCard(al){
 function leagueTab(sub){
   sub=sub||subOf('league');const on=k=>sub==='all'||sub===k;
   const p=poll();let h='';if(on('scores'))h+=scoresView(p);if(on('hist')){try{h+=expandCard()}catch(e){}try{h+=classicsCard()}catch(e){}}
-  if(on('news'))h+=podHTML();
   const keys=Object.keys(S.news||{}).sort((a,b)=>a==='pre'?-1:b==='pre'?1:+a-+b),cur=latestNewsKey(),items=(S.news&&S.news[cur])||[];
   if(on('news')&&keys.length){
     h+='<div class="chips wk" data-keep="lgw">'+keys.map(k=>'<button class="chip'+(k===cur?' amber':'')+'" data-act="lgw" data-w="'+k+'">'+(k==='pre'?'Preseason':+k<12?'Wk '+(+k+1):['Champ','Rd 1','QF','SF','Title'][+k-12]||'Post')+'</button>').join('')+'</div>';
     h+='<section class="card"><span class="eyebrow">'+(cur==='pre'?'Preseason storylines':weekLabel(+cur)+' storylines')+'</span>'+
       (items.length?items.map((n,i)=>'<article class="news'+(i===0?' lead':'')+'" style="--tc:'+team(n.team).color+'"><span class="tagc t-'+tagKey(n.tag)+'">'+esc(n.tag)+'</span><h3>'+esc(n.title)+'</h3><p>'+esc(n.body)+'</p></article>').join(''):'<p class="muted">A quiet week. Nobody did anything strange.</p>')+'</section>';
   }
+  if(on('news'))h+=podHTML();
   if(on('people')){
   const hz=heisman().slice(0,6);
   h+='<section class="card"><h3>Heisman watch</h3><ol class="rank">'+hz.map((c,i)=>'<li class="'+(c.mine?'me':'')+'"><span class="rn">'+(i+1)+'</span><span style="min-width:0"><b>'+esc(c.name)+'</b> <span class="muted">'+c.pos+', '+esc(c.t.name)+(c.out?' · injured':'')+'</span><br><span class="muted num" style="font-size:12.5px">'+c.yds.toLocaleString()+' yds · '+c.td+' TD · team '+recStr(c.t.id)+'</span></span></li>').join('')+'</ol></section>';
