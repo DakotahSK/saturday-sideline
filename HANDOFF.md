@@ -41,13 +41,13 @@ Known leftovers and polish ideas (not done):
 - VIC logo has a white fill inside the bow on dark backgrounds.
 - On a long dropback the offensive linemen bunch toward the center.
 - Desktop game screen: the field fills the viewport so the play-call panel and watch dock sit below the fold.
-- Score bug is cramped at 430px with ranks and two-digit scores (left alone because of the score-bug rule; ask Dakotah before touching it).
 - Halftime totals can disagree with pass plus rush when sacks are involved; halftime "By quarter" note has no quarter labels.
 - The STOPPED flash can stay on screen at game over after a turnover on downs.
 - Watch speed 1x feels slow; rain is faint during play.
-- Arcs: seat arcs start late for weak teams (some firings at 0-9), free fall triggers at 2-3, unbeaten arcs are the most frequent.
+- Arcs: unbeaten arcs are the most frequent.
 - Stadium variety mostly shows in pregame; upper decks look blocky at low angles.
-- Dynasty question he asked: prestige drives recruiting (`recruitAll`), so the same programs stay on top. If he wants more turnover: make prestige react faster or weight coaching more in recruiting. Only change this if he asks.
+- Parity (done 2026-11-11, version 96, he approved): in `recruitAll` prestige weight in class score .5 to .38, coach weight .3 to .45, last-season wins .6 to .8, coach development .05 to .08, prestige blend .8/.2 to .72/.28. `tests/parity_t.js` (run from tests/, slow): 8-season sim went from 10 to 13 distinct top-4 teams, top-8 carryover 5.4 to 5.1. Next dial if he wants more: prestige blend .65/.35 or coach weight .55.
+- Also in version 96: Rankings > Recruits tab (full class rankings), score bug tightened for phones (CSS media queries at 520px and 400px only, he approved), arc tuning (hot seat starts for weak teams at 0-4/1-5, free fall needs 4 losses unless preseason top 3).
 
 ## Starter prompt for a new chat
 

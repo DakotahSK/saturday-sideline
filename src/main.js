@@ -1146,7 +1146,7 @@ function recruitAll(){
   const p=poll(),news=[];
   for(const t of S.teams){
     const r=rec(t.id),rk=p.indexOf(t.id)+1,past=(t.past||[]).slice(-4);
-    let c=72+(t.prestige-72)*.5+(r.w-6)*.6+(rk<=4?2:0)+gauss()*9+(t.id===S.userId?0:(coachRt(t)-70)*.3);
+    let c=72+(t.prestige-72)*.38+(r.w-6)*.8+(rk<=4?2:0)+gauss()*9+(t.id===S.userId?0:(coachRt(t)-70)*.45);
     t._ev=null;
     if((S.carousel||[]).some(x=>x.t===t.id))c+=gauss()*5;
     if(R()<.1&&t.prestige<82){c+=rnd(8,15);t._ev='breakout'}
@@ -1160,11 +1160,11 @@ function recruitAll(){
   const order=[...S.teams].sort((a,b)=>b.cls-a.cls),NT=S.teams.length/32;order.forEach((t,i)=>{t.clsRank=i+1;const q=i/NT;t.clsStars=q<3?5:q<9?4:q<18?3:q<26?2:1});
   for(const t of S.teams){
     const r=rec(t.id),before=t.off+t.def,keep=.55;
-    const dv=t.id===S.userId?0:(coachRt(t)-70)*.05;
+    const dv=t.id===S.userId?0:(coachRt(t)-70)*.08;
     t.off=Math.round(clamp(t.off*keep+t.cls*(1-keep)+gauss()*2.5+dv,50,99));
     t.def=Math.round(clamp(t.def*keep+(t.cls+gauss()*3)*(1-keep)+gauss()*2.5+dv,50,99));
     const target=48+r.w*3.6+(t.cc?3:0)+(S.champs.natl===t.id?5:0);
-    {const np=Math.round(clamp(t.prestige*.8+target*.2,t.born!=null?36:50,96));t.prestige=t.born!=null&&S.season-t.born<6?Math.min(np,t.prestige+7):np}
+    {const np=Math.round(clamp(t.prestige*.72+target*.28,t.born!=null?36:50,96));t.prestige=t.born!=null&&S.season-t.born<6?Math.min(np,t.prestige+7):np}
     t._delta=(t.off+t.def)-before;
   }
   const N=t=>t.name;
@@ -2710,7 +2710,7 @@ function arcsWeek(w,add){
       else if(w>=a.n+3||last){const kk=wk+lk;a.x=0;if(kk>=2&&wk>=Math.ceil(kk*.67)){a.done=1;c.interim=false;c.rt=Math.max(c.rt||0,62);c.heat=25;say('Coaching',58,a.t,F(pk(['{c} gets the job at {t}','Interim no more: {t} makes {c} the head coach','The tag comes off: {c} stays at {t}']),v),F(pk(['{t} is {wk}-{lk} since the change, after starting {r0}. The athletic director said the players answered the call.','{old} left at {r0}. {c} has gone {wk}-{lk} since and the interim label is gone.']),v))}
         else{a.done=2;say('Coaching',48,a.t,F(pk(['No bounce at {t}: {wk}-{lk} since the firing','{t} sinks further under interim {c}','Firing {old} did not fix {t}']),v),F(pk(['{old} was fired at {r0}. {t} is {wk}-{lk} since. Somebody is going to have to explain the plan.','{c} inherited a {r0} team and a {wk}-{lk} stretch has not changed the mood. The real search starts in December.']),v))}}}}
   for(const t of S.teams){const id=t.id;if(id===user||!t.coach||t.coach.interim||has('seat',id)||w<3||w>9||out.filter(x=>x.k==='seat').length||(cnt('seat')>=5))continue;const r=rec(id);
-    if(t.coach.heat>=56&&r.l>=3&&r.l>r.w-1&&rr()<.7){const a=start('seat',id,0,0),ly=lastYr(t),v={t:t.name,c:t.coach.name,r:recStr(id),l:r.l,w:r.w,g:r.w+r.l,y:t.coach.yrs+1,pw:ly&&ly.w,pl:ly&&ly.l};
+    if(((t.coach.heat>=56&&r.l>=3&&r.l>r.w-1)||(r.l>=4&&r.w<=1&&t.coach.heat>=30)||(r.l>=5&&r.w<=1))&&rr()<.7){const a=start('seat',id,0,0),ly=lastYr(t),v={t:t.name,c:t.coach.name,r:recStr(id),l:r.l,w:r.w,g:r.w+r.l,y:t.coach.yrs+1,pw:ly&&ly.w,pl:ly&&ly.l};
       const h1=pk(['{t} is {r} and has dropped {l} of {g}.','{r} is not what {t} paid for. That is {l} losses in {g} games.','{t} is {r}, and nobody in the building is calling it a rebuilding year.']),
         h2=ly&&ly.w>=7?F('The {pw}-{pl} finish last fall bought {c} some patience. It is gone.',v):t.prestige>=75?F('At a school with this much history, {r} does not fly.',v):F(pk(['{c} is in year {y} and has not handed the fan base a winning season to point to.','The money guys at {t} have started asking what the plan is.']),v);
       say('Hot seat',54,id,F(pk(['{c} is running out of rope at {t}','The {t} job is getting hot','Hot seat watch: {c} and {t}','{t} is {r}, and the boosters are counting']),v),F(h1,v)+' '+h2);out[out.length-1].k='seat'}}
@@ -2743,7 +2743,7 @@ function arcsWeek(w,add){
     if(s.w&&s.n>=2){a.done=1;say('Drama',46,a.t,F(pk(['{t} stops the bleeding','The season is not lost at {t}, after all']),v),F('A preseason No. {pr} team, {t} has won {s} straight and climbed back to {r}. The doubters have gone quiet, but the damage in the standings is done.',Object.assign(v,{s:s.n})));continue}
     if(last){a.done=2;say('Drama',44,a.t,F(pk(['A lost year at {t}: {r} after a No. {pr} start','{t} finishes {r}, a long way from No. {pr}']),v),F('Nobody expected this when the preseason poll came out. {t} will spend the winter explaining {r}.',v));continue}
     if(a.st===0&&w>a.w0){a.st=1;a.x=rr()<.5?.8:0;say('Drama',47,a.t,F(pk(['Players-only meeting at {t}','{t} locks the doors and talks it out']),v),F(pk(['{t} is {r}. The captains called the meeting, {c} stayed out of the room, and the locker room was loud enough that people in the hall heard it.','After a No. {pr} start to the year and a {r} record, the leaders on the team decided the coaches were not the only ones who needed to speak up.']),v))}}
-  if(w>=3&&w<=9&&cnt('fall')<3&&!out.some(x=>x.k==='fall'))for(const t of S.teams){const id=t.id,r=rec(id);if(id===user||has('fall',id)||A.list.some(a=>a.k==='fall'&&a.t===id)||pre(id)<1||pre(id)>12||r.l<3||r.l<r.w)continue;start('fall',id,0,0);t.coach.heat=Math.min(100,t.coach.heat+6);
+  if(w>=3&&w<=9&&cnt('fall')<3&&!out.some(x=>x.k==='fall'))for(const t of S.teams){const id=t.id,r=rec(id);if(id===user||has('fall',id)||A.list.some(a=>a.k==='fall'&&a.t===id)||pre(id)<1||pre(id)>12||r.l<3||r.l<r.w||(r.l<4&&pre(id)>3))continue;start('fall',id,0,0);t.coach.heat=Math.min(100,t.coach.heat+6);
     const champ=S.champHist&&S.champHist[0]&&S.champHist[0].natl===id,v={t:t.name,r:recStr(id),pr:pre(id),l:r.l};say('Drama',55,id,F(champ?pk(['The defending champions are {r}','Hangover: {t} is {r} a year after the title']):pk(['{t} was No. {pr} in August. Look at it now','Free fall: {t} is {r}','Preseason No. {pr} {t} has lost {l}']),v),F(champ?'{t} won it all last season. This season it is {r} and the trophy case looks like a museum exhibit about a different team.':pk(['Voters had {t} at No. {pr} in the preseason. After {l} losses, it is not close to the poll.','{t} was supposed to be a contender and is {r} instead. Fans have gone from planning trips to planning to complain.']),v));out[out.length-1].k='fall';break}
   // ---- revenge game
   const slight=(A0,B0,g)=>{const t=team(A0),ly=lastYr(t);if(ly)for(const x of ly.pg||[])if(x[2]===B0&&x[3]<x[4])return {x:'On '+(S.season-1===S.season-1?'last year\'s bracket':''),txt:'Last year, '+N(B0)+' beat '+N(A0)+' '+x[4]+'-'+x[3]+' in the '+(ARCSTG[x[0]]||'postseason')+'.'};
@@ -6253,7 +6253,7 @@ function setupView(){
 /* ---------- main pages: masthead, section nav, sub-tabs ----------
    S.tab keeps its old values (week, league, sched, stand, poll, bracket, prog) so old saves land on the same page.
    Five sections sit in the nav bar; the rest are sub-tabs. The sub-tab you were on is remembered per section. */
-const SECOF={week:'week',league:'league',poll:'rank',stand:'rank',bracket:'rank',sched:'sched',prog:'prog'};
+const SECOF={week:'week',league:'league',poll:'rank',stand:'rank',bracket:'rank',recr:'rank',sched:'sched',prog:'prog'};
 const SUBS={week:{k:'hmSub',o:[['game','Game day'],['buzz','Buzz']]},league:{k:'lgSub',o:[['scores','Scores'],['news','News'],['people','People'],['hist','History']]},sched:{k:'tmSub',o:[['sched','Schedule'],['fans','Fans'],['hist','History'],['logo','Logo']]},prog:{k:'pgSub',o:[['team','Team'],['rec','Recruiting'],['hist','History'],['office','Office']]}};
 function secOf(){return SECOF[S.tab]||'week'}
 function subOf(sec){const D=SUBS[sec];if(!D)return null;const v=S[D.k];return D.o.some(o=>o[0]===v)?v:D.o[0][0]}
@@ -6263,18 +6263,18 @@ function header(){
   return '<header class="top mast" style="--tc:'+u.color+'">'+badge(u)+'<div class="mast-t"><h1>'+esc(u.name)+'</h1><p>'+esc(S.coach)+' · '+yearOf(S.season)+' season'+(wl?' · '+wl:'')+'</p></div><div class="mast-r"><b class="num">'+r.w+'-'+r.l+'</b><small class="num">'+(rkn<=PN?'No. '+rkn+' · ':'')+r.cw+'-'+r.cl+' '+esc(CONFS[u.conf])+'</small></div></header>';
 }
 function tabs(){
-  const sec=secOf(),T=[['week','Home','week'],['league','League','league'],['rank','Rankings',['poll','stand','bracket'].includes(S.rkSub)?S.rkSub:'poll'],['sched','Teams','sched'],['prog','Program','prog']];
+  const sec=secOf(),T=[['week','Home','week'],['league','League','league'],['rank','Rankings',['poll','stand','bracket','recr'].includes(S.rkSub)?S.rkSub:'poll'],['sched','Teams','sched'],['prog','Program','prog']];
   return '<nav class="bnav" aria-label="Sections">'+T.map(([k,n,t])=>'<button data-act="tab" data-t="'+t+'" data-nav="'+k+'"'+(sec===k?' aria-current="page"':'')+'><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="currentColor">'+NAVIC[k]+'</svg><span>'+n+'</span></button>').join('')+'</nav>';
 }
 function subnav(){
   const sec=secOf();
-  if(sec==='rank')return '<nav class="subnav" role="tablist" aria-label="Rankings" data-keep="sub-rank">'+[['poll','Top '+PN],['stand','Standings'],['bracket','Playoff']].map(([k,n])=>'<button role="tab" aria-selected="'+(S.tab===k)+'" data-act="tab" data-t="'+k+'">'+n+'</button>').join('')+'</nav>';
+  if(sec==='rank')return '<nav class="subnav" role="tablist" aria-label="Rankings" data-keep="sub-rank">'+[['poll','Top '+PN],['stand','Standings'],['bracket','Playoff'],['recr','Recruits']].map(([k,n])=>'<button role="tab" aria-selected="'+(S.tab===k)+'" data-act="tab" data-t="'+k+'">'+n+'</button>').join('')+'</nav>';
   const D=SUBS[sec],cur=subOf(sec);
   return '<nav class="subnav" role="tablist" data-keep="sub-'+sec+'">'+D.o.map(([k,n])=>'<button role="tab" aria-selected="'+(cur===k)+'" data-act="sub" data-k="'+D.k+'" data-v="'+k+'">'+n+'</button>').join('')+'</nav>';
 }
 function hubView(){
   let body='';
-  if(S.tab==='league')body=leagueTab();else if(S.tab==='sched')body=schedTab();else if(S.tab==='stand')body=standTab();else if(S.tab==='poll')body=pollTab();else if(S.tab==='bracket')body=bracketView()+playoffExtras();else if(S.tab==='prog')body=progTab();else body=weekTab();
+  if(S.tab==='league')body=leagueTab();else if(S.tab==='sched')body=schedTab();else if(S.tab==='stand')body=standTab();else if(S.tab==='poll')body=pollTab();else if(S.tab==='recr')body=recRankTab();else if(S.tab==='bracket')body=bracketView()+playoffExtras();else if(S.tab==='prog')body=progTab();else body=weekTab();
   const warn=CLOUD.state==='error'&&CLOUD.errAt&&Date.now()-CLOUD.errAt>15000?'<section class="card savewarn"><b>Your account save is not going through.</b><p style="font-size:13px;margin:4px 0 0">Progress is only on this device right now and it keeps retrying. Keep this tab open until this message goes away, and don\'t play on another device in the meantime.</p></section>':'';
   const sec=secOf();
   return '<div class="hubtop">'+header()+tabs()+'</div>'+subnav()+warn+'<main class="pg pg-'+sec+' pgs-'+(sec==='rank'?S.tab:subOf(sec))+'">'+body+'</main>';
@@ -6507,6 +6507,16 @@ function standTab(){
   return '<div class="chips">'+CONFS.map((n,i)=>'<button class="chip'+(i===c?' amber':'')+'" data-act="conf" data-c="'+i+'">'+esc(n)+'</button>').join('')+'</div>'+
     '<section class="card"><h3>'+esc(CONFS[c])+' standings</h3>'+(groups.length>1?(()=>{const cg=S.games.find(g=>g.ccg===c);if(cg)return '<div class="ccg"><span class="eyebrow">'+esc(CONFS[c])+' Championship · '+(cg.done?'Final':'Championship Week')+'</span><b>'+esc(team(cg.a).name)+(cg.done?' '+cg.as:'')+' vs '+esc(team(cg.h).name)+(cg.done?' '+cg.hs:'')+'</b></div>';const L2=divLeaders(c,p);return '<div class="ccg"><span class="eyebrow">Title game outlook · If it ended today</span><b>'+esc(team(L2[0]).name)+' vs '+esc(team(L2[1]).name)+'</b><span class="muted" style="font-size:12.5px">Current '+esc(DIVS[c][0])+' and '+esc(DIVS[c][1])+' division leaders. Division winners meet for the '+esc(CONFS[c])+' title.</span></div>'})():'')+'<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Team</th><th class="r">Conf</th><th class="r">All</th><th class="r">SOS</th><th class="r">PF</th><th class="r">PA</th></tr></thead>'+
     groups.map(g=>(g.n?'<tbody><tr class="dh"><td colspan="6">'+esc(g.n)+'</td></tr></tbody>':'')+'<tbody>'+g.ids.map(row).join('')+'</tbody>').join('')+'</table></div></section>';
+}
+function recRankTab(){
+  /* full recruiting class rankings from the last signing day (team.cls / clsRank / clsStars, set in recruitAll) */
+  const L=S.teams.filter(t=>t.clsRank).sort((a,b)=>a.clsRank-b.clsRank);
+  if(!L.length)return '<section class="card"><h3>Recruiting rankings</h3><p class="muted">No classes have signed yet. The rankings fill in on Signing Day after the season.</p></section>';
+  const yr=yearOf(S.week>=12?S.season:S.season-1),me=U(),mr=me.clsRank;
+  const ev=t=>t._ev==='breakout'?'<span class="chip amber" style="font-size:10.5px;padding:1px 6px">Breakout</span>':t._ev==='drain'?'<span class="chip" style="font-size:10.5px;padding:1px 6px">Drain</span>':'';
+  return '<section class="card"><h3>Recruiting rankings · '+yr+' class</h3><p class="muted" style="font-size:12.5px;margin:0 0 8px">Every class from the last Signing Day. Score drives how much each roster changes next season. '+(mr?esc(me.name)+' signed the No. '+mr+' class.':'')+'</p><div style="overflow-x:auto"><table class="tbl"><thead><tr><th>#</th><th>Team</th><th class="r">Stars</th><th class="r">Score</th></tr></thead><tbody>'+
+    L.map(t=>'<tr class="'+(t.id===S.userId?'me':'')+'"><td>'+t.clsRank+'</td><td><span class="tcell">'+mlogo(t,'big')+'<button class="lnk" data-act="vsched" data-id="'+t.id+'">'+esc(t.name)+'</button> '+ev(t)+'</span></td><td class="r" style="color:var(--amber);white-space:nowrap">'+'★'.repeat(t.clsStars||1)+'</td><td class="r num">'+t.cls+'</td></tr>').join('')+
+    '</tbody></table></div></section>';
 }
 function pollTab(){
   const p=poll().slice(0,PN);
@@ -6955,7 +6965,7 @@ function act(a,d){
       if(!S){const nmv=(($('#coachName')||{}).value||'').trim()||'Coach';const mt=leagueMeta();S={baseYear:2025,coach:nmv,teams:L,season:1,history:[],ad:{conf:60},recruit:'bal',qlen:300,defMode:'me',confs:mt.confs,divs:mt.divs,rivalDefs:mt.rivalDefs,lname:mt.lname,_cid:'c'+Date.now().toString(36)+Math.floor(Math.random()*1e6).toString(36)};CONFS=mt.confs;DIVS=mt.divs}
       else S.ad={conf:55};
       S.userId=id;S.stars=genStars(team(id).prestige);if(S.lname==='Church League'&&LS.loreV1&&!S.loreV1){S.lore=LORE.map(([y,i,note])=>({y,t:i,note}));S.loreHeis=LORE_HEIS.map(([y,name,pos,i])=>({y,name,pos,t:i}));S.loreV1=true;const sw=team(8);if(sw&&sw.coach&&id!==8)sw.coach.name='Andrew Albert'}startSeason();window.scrollTo(0,0);break}
-    case 'tab':S.tab=d.t;if(d.t==='poll'||d.t==='stand'||d.t==='bracket')S.rkSub=d.t;if(d.sub&&SUBS[SECOF[d.t]])S[SUBS[SECOF[d.t]].k]=d.sub;window.scrollTo(0,0);break;
+    case 'tab':S.tab=d.t;if(d.t==='poll'||d.t==='stand'||d.t==='bracket'||d.t==='recr')S.rkSub=d.t;if(d.sub&&SUBS[SECOF[d.t]])S[SUBS[SECOF[d.t]].k]=d.sub;window.scrollTo(0,0);break;
     case 'sub':if(Object.keys(SUBS).some(k=>SUBS[k].k===d.k))S[d.k]=d.v;window.scrollTo(0,0);break;
     case 'lgf':S.lgF=d.f;S.lgOpen=null;break;
     case 'scw':S.scWeek=d.w==='now'?null:+d.w;S.lgOpen=null;break;

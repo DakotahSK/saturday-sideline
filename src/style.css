@@ -786,3 +786,9 @@ div.bbox{cursor:default}
 .st-row:first-of-type{border-top:0}.st-k{grid-row:span 2;align-self:start;font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--amber,#f2b84b);padding-top:2px}
 .st-t{font-weight:600}.st-s{color:var(--muted,#9aa);font-size:12.5px}.st-old{opacity:.6}
 .pgs-stand .tbl td:first-child .lnk{display:inline-block;max-width:calc(100% - 46px);vertical-align:middle;overflow:hidden;text-overflow:ellipsis}
+@media(max-width:899px){.subnav button{flex:1 1 auto;padding:0 6px;font-size:14px;letter-spacing:.03em}}
+.pgs-recr .tbl td:nth-child(2){max-width:0;width:100%;overflow:hidden;white-space:nowrap}
+.pgs-recr .tbl td:nth-child(2) .lnk{display:inline-block;max-width:calc(100% - 90px);vertical-align:middle;overflow:hidden;text-overflow:ellipsis}
+.pgs-recr .tbl td.r{white-space:nowrap}
+@media(max-width:520px){.sbt{gap:5px;padding:7px 7px 7px 10px}.sbt.r{padding:7px 10px 7px 7px}.sbt .lg{width:24px;height:24px}.sbm{min-width:66px;padding:4px 4px}.sbm .clk{font-size:18px}.sbt .ab{font-size:15px;letter-spacing:.02em;gap:3px}.sbt .ab small{font-size:9.5px}.sbt .ptw{min-width:30px}}
+@media(max-width:400px){.sbt{gap:4px;padding:7px 5px 7px 9px}.sbt.r{padding:7px 9px 7px 5px}.sbt .lg{width:20px;height:20px}.sbm{min-width:58px;padding:4px 2px}.sbm .clk{font-size:16px}.sbt .ab{font-size:14px}}
