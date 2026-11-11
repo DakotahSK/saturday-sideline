@@ -154,6 +154,31 @@ const NUMR={QB:[1,19],RB:[20,39],FB:[30,49],X:[1,19],Z:[1,19],S:[1,19],S2:[80,89
 let S=null, G=null, L=null, confirmReset=false;
 
 function save(){if(S)S._ts=Date.now();try{localStorage.setItem('saturday_sideline_v1',JSON.stringify(S))}catch(e){}cloudQueue()}
+/* ---------- navigation state ----------
+   Which page, sub-tab, filter or open sheet you are looking at is view state, not career progress.
+   It is kept on S so it survives a reload, but it is saved on this device only (saveNav) and it is
+   carried over whenever a copy of the career arrives from the account (adoptCareer), so a background
+   sync can never move you to another page. */
+const UIKEYS=['tab','hmSub','lgSub','rkSub','tmSub','pgSub','lgF','scWeek','lgOpen','lgWeek','lgAll','podSel','standConf','schedTeam','histAll','clsAll','phist','phTab','rview','rvTab','gview','clview','cdOpen','tkAll','watchFrom'];
+const NAVACT=new Set(['tab','sub','lgf','scw','lgopen','lgw','lgall','podsel','gview','gclose','clview','clclose','clsall','phist','phclose','rview','rvtab','rvclose','histall','conf','vsched','navmore']);
+function uiSnap(c){const o={};if(c)for(const k of UIKEYS)if(k in c)o[k]=c[k];return o}
+function saveNav(){try{localStorage.setItem('saturday_sideline_v1',JSON.stringify(S))}catch(e){}}
+function adoptCareer(cv){
+  const old=S,same=old&&sameCareer(cv,old),keep=same?uiSnap(old):null;
+  if(same){for(const k of UIKEYS)delete cv[k];Object.assign(cv,keep);
+    const soft=v=>v==='hub'||v==='selection'||v==='summary'||v==null;
+    if(careerProg(cv)===careerProg(old)&&soft(old.view)&&soft(cv.view)&&!(cv.view==='summary'&&old.view!=='summary')&&!(old.view==='summary'&&cv.view!=='summary'))cv.view=old.view;
+    if(cv.gview!=null&&!(cv.games&&cv.games[cv.gview]))cv.gview=null}
+  S=cv;G=S.game||null;
+}
+/* re-render caused by something other than a tap (sync, retry timers): never moves the scroll, and does nothing at all if the page would come out identical */
+let RBG=false;
+function bgRender(){
+  if(typeof window==='undefined'||(S&&S.view==='game'&&G)){render();return}
+  const y=window.scrollY,m=document.querySelector&&document.querySelector('.mbody'),my=m?m.scrollTop:0;
+  RBG=true;try{render()}finally{RBG=false}
+  try{const m2=document.querySelector('.mbody');if(m2&&my)m2.scrollTop=my;if(Math.abs((window.scrollY||0)-y)>1)window.scrollTo(0,y)}catch(e){}
+}
 function load(){try{const s=localStorage.getItem('saturday_sideline_v1');if(s){S=JSON.parse(s);G=S.game||null}}catch(e){S=null}}
 
 function newLeague(){
@@ -976,7 +1001,7 @@ function feedCard(n){
   const mineFeed=(S.feed||[]).filter(p=>p.season===S.season||p.season==null).slice(0,3);
   const gen=teamFeed(S.userId,Math.max(2,n-mineFeed.length));
   const list=[...mineFeed,...gen].slice(0,n);if(!list.length)return '';
-  return '<section class="card"><div class="spread"><h3>Fan feed</h3><button class="lnk" data-act="vsched" data-id="'+S.userId+'">See more</button></div>'+moodHTML(S.userId)+postsHTML(list)+'</section>';
+  return '<section class="card"><div class="spread"><h3>Fan feed</h3><button class="lnk" data-act="vsched" data-sub="fans" data-id="'+S.userId+'">See more</button></div>'+moodHTML(S.userId)+postsHTML(list)+'</section>';
 }
 
 /* ---------- bowl projections ---------- */
@@ -5267,15 +5292,15 @@ async function cloudInit(){
         if(!S){S=cv;G=S.game||null;try{localStorage.setItem('saturday_sideline_v1',JSON.stringify(S))}catch(e){}changed=true}
         else if(!sameCareer(cv,S)){if(JSON.stringify(cv.teams)!==JSON.stringify(S.teams)){SYNCQ=SYNCQ||{};SYNCQ.career=cv}}
         else{const pc=careerProg(cv),pl=careerProg(S);
-          if(pc>pl||(pc===pl&&(d.ts||0)>(S._ts||0))){bk('saturday_sideline_v1');S=cv;G=S.game||null;try{localStorage.setItem('saturday_sideline_v1',JSON.stringify(S))}catch(e){}changed=true;CLOUD.cts=d.ts||0}
+          if(pc>pl||(pc===pl&&(d.ts||0)>(S._ts||0))){bk('saturday_sideline_v1');adoptCareer(cv);try{localStorage.setItem('saturday_sideline_v1',JSON.stringify(S))}catch(e){}changed=true;CLOUD.cts=d.ts||0}
           else if(pl>pc){await cloudSnap('career_prev',d)}}
       }}catch(e){}}
     }
     if(S&&!SYNCQ)CLOUD.sprog=careerProg(S);
     if(S&&!S._cid){S._cid='L'+hashS((S.lname||'')+'|'+(S.coach||'')+'|'+(S.baseYear||''))}
-    if(SYNCQ){CLOUD.hold=true;CLOUD.ready=true;CLOUD.state='local';applyCareerGlobals();render();return}
+    if(SYNCQ){CLOUD.hold=true;CLOUD.ready=true;CLOUD.state='local';applyCareerGlobals();bgRender();return}
     CLOUD.ready=true;CLOUD.state='synced';
-    if(changed){BV.open=BV.open&&!!LS;applyCareerGlobals();render()}else refreshStatus();
+    if(changed){BV.open=BV.open&&!!LS;applyCareerGlobals();bgRender()}else refreshStatus();
     cloudPush();
   }catch(e){CLOUD.state='error';refreshStatus()}
 }
@@ -5297,27 +5322,29 @@ async function cloudPush(retry){
           if(cv&&cv.teams){
             const newer=sameCareer(cv,S)&&(careerProg(cv)>careerProg(S)||(CLOUD.sprog!=null&&careerProg(S)===CLOUD.sprog&&careerProg(cv)>=careerProg(S)));
             if(newer&&G&&S.view==='game'){pushing=false;CLOUD.state='error';refreshStatus();return}
-            if(newer){try{const o=localStorage.getItem('saturday_sideline_v1_backup');let keep=false;if(o){const a=JSON.parse(o);keep=sameCareer(a,S)&&careerProg(a)>careerProg(S)}if(!keep)localStorage.setItem('saturday_sideline_v1_backup',JSON.stringify(S))}catch(e){}S=cv;G=S.game||null;try{localStorage.setItem('saturday_sideline_v1',JSON.stringify(S))}catch(e){}CLOUD.cts=cd.ts||0;CLOUD.sprog=careerProg(S);pushing=false;CLOUD.state='synced';applyCareerGlobals();if(!SC.A&&!(typeof G!=='undefined'&&G&&S.view==='game'))render();refreshStatus();return}
-            if(!sameCareer(cv,S)){CLOUD.hold=true;SYNCQ={career:cv};pushing=false;CLOUD.state='local';render();return}
+            if(newer){try{const o=localStorage.getItem('saturday_sideline_v1_backup');let keep=false;if(o){const a=JSON.parse(o);keep=sameCareer(a,S)&&careerProg(a)>careerProg(S)}if(!keep)localStorage.setItem('saturday_sideline_v1_backup',JSON.stringify(S))}catch(e){}adoptCareer(cv);try{localStorage.setItem('saturday_sideline_v1',JSON.stringify(S))}catch(e){}CLOUD.cts=cd.ts||0;CLOUD.sprog=careerProg(S);pushing=false;CLOUD.state='synced';applyCareerGlobals();if(!SC.A&&!(typeof G!=='undefined'&&G&&S.view==='game'))bgRender();refreshStatus();return}
+            if(!sameCareer(cv,S)){CLOUD.hold=true;SYNCQ={career:cv};pushing=false;CLOUD.state='local';bgRender();return}
           }}
         if(!cd.none&&(cd.json||cd.parts)){let cv=null;try{cv=JSON.parse(await zunpack(await docJson('career',cd)))}catch(e){}if(cv&&(!sameCareer(cv,S)||careerProg(cv)>careerProg(S)))await cloudSnap('career_prev',cd)}
       }
       CLOUD.force=false;
-      const pk=await packSave();await writeSplit('career',pk,{ts:S._ts});CLOUD.errAt=0;CLOUD.cts=S._ts;CLOUD.sprog=careerProg(S);CLOUD.hadCareer=true;
-      const wk=(S.season||0)*20+(S.week||0);if(CLOUD.snapWk!==wk){CLOUD.snapWk=wk;await cloudSnap('snap'+(wk%10),{json:pk,ts:S._ts})}}
+      /* wts is the stamp of the copy being written. Taps during the write move S._ts on; remembering the newer stamp as "what the account has" made the next sync think another device had written, and it loaded the older copy back (the page flipped to where you were a moment ago). */
+      const wts=S._ts,wprog=careerProg(S),pk=await packSave();await writeSplit('career',pk,{ts:wts});CLOUD.errAt=0;CLOUD.cts=wts;CLOUD.sprog=wprog;CLOUD.hadCareer=true;
+      const wk=(S.season||0)*20+(S.week||0);if(CLOUD.snapWk!==wk){CLOUD.snapWk=wk;await cloudSnap('snap'+(wk%10),{json:pk,ts:wts})}}
     else if(!S&&CLOUD.hadCareer){try{const cur=await CLOUD.db.doc(base+'career').get();if(cur.exists&&!(cur.data()||{}).none)await cloudSnap('career_prev',cur.data())}catch(e){}const ts=Date.now();await CLOUD.db.doc(base+'career').set({none:true,ts});CLOUD.cts=ts;CLOUD.hadCareer=false}
     CLOUD.state='synced';
-  }catch(e){CLOUD.state='error';CLOUD.errAt=CLOUD.errAt||Date.now();setTimeout(()=>{pushing=false;cloudPush(true)},(retry?20000:4000)+Math.random()*2000);try{render()}catch(x){}}
+  }catch(e){CLOUD.state='error';CLOUD.errAt=CLOUD.errAt||Date.now();setTimeout(()=>{pushing=false;cloudPush(true)},(retry?20000:4000)+Math.random()*2000);try{bgRender()}catch(x){}}
   pushing=false;refreshStatus();
+  if(CLOUD.state==='synced'&&!CLOUD.hold&&((S&&(S._ts||0)!==CLOUD.cts)||(LS&&LS._edited&&(LS._ts||0)!==CLOUD.lts)))cloudQueue(); /* something was saved while this push was in flight */
 }
 let SYNCQ=null;
 async function loadSnaps(){
-  CLOUD.snaps=null;render();
-  if(!CLOUD.db){CLOUD.snaps=[];render();return}
+  CLOUD.snaps=null;bgRender();
+  if(!CLOUD.db){CLOUD.snaps=[];bgRender();return}
   const ids=['career_prev'].concat([0,1,2,3,4,5,6,7,8,9].map(i=>'snap'+i)),out=[];
   await Promise.all(ids.map(async id=>{try{const r=await CLOUD.db.doc('data/users/'+CLOUD.uid+'/'+id).get();if(r.exists){const d=r.data()||{};const c=JSON.parse(await zunpack(await docJson(id,d)));if(c&&c.teams&&sameCareer(c,S))out.push({id,c,ts:d.saved||d.ts||0,prog:careerProg(c)})}}catch(e){}}));
   out.sort((a,b)=>b.prog-a.prog||b.ts-a.ts);
-  CLOUD.snaps=out.filter((x,i,a)=>a.findIndex(y=>y.prog===x.prog)===i);render();
+  CLOUD.snaps=out.filter((x,i,a)=>a.findIndex(y=>y.prog===x.prog)===i);bgRender();
 }
 function snapModal(){
   if(!S||!CLOUD.snapOpen)return '';
@@ -5415,29 +5442,51 @@ function setupView(){
   }
   return h;
 }
+/* ---------- main pages: masthead, section nav, sub-tabs ----------
+   S.tab keeps its old values (week, league, sched, stand, poll, bracket, prog) so old saves land on the same page.
+   Five sections sit in the nav bar; the rest are sub-tabs. The sub-tab you were on is remembered per section. */
+const SECOF={week:'week',league:'league',poll:'rank',stand:'rank',bracket:'rank',sched:'sched',prog:'prog'};
+const SUBS={week:{k:'hmSub',o:[['game','Game day'],['buzz','Buzz']]},league:{k:'lgSub',o:[['scores','Scores'],['news','News'],['people','People'],['hist','History']]},sched:{k:'tmSub',o:[['sched','Schedule'],['fans','Fans'],['hist','History'],['logo','Logo']]},prog:{k:'pgSub',o:[['team','Team'],['rec','Recruiting'],['hist','History'],['office','Office']]}};
+function secOf(){return SECOF[S.tab]||'week'}
+function subOf(sec){const D=SUBS[sec];if(!D)return null;const v=S[D.k];return D.o.some(o=>o[0]===v)?v:D.o[0][0]}
+const NAVIC={week:'<path d="M3 11.5 12 4l9 7.5V20h-6v-5.5H9V20H3z"/>',league:'<path d="M3 5h18v14H3zM12 5v14M3 12h18" fill="none" stroke="currentColor" stroke-width="2"/>',rank:'<path d="M9 3h6v18H9zM2 10h5v11H2zM17 13h5v8h-5z"/>',sched:'<path d="M12 2 4 5v6c0 5.2 3.3 9.2 8 11 4.7-1.8 8-5.8 8-11V5z"/>',prog:'<path d="M8 2h8v3h3v17H5V5h3zM8 10h8v2H8zm0 4h8v2H8z" fill-rule="evenodd"/>'};
 function header(){
-  const u=U(),r=rec(S.userId);
-  return '<header class="top">'+badge(u)+'<div style="min-width:0"><h1>'+esc(u.name)+'</h1><p>'+esc(S.coach)+' · '+yearOf(S.season)+' season · <span class="num">'+r.w+'-'+r.l+' ('+r.cw+'-'+r.cl+' '+CONFS[u.conf]+')</span>'+(rankOf(S.userId)<=PN?' · #'+rankOf(S.userId):'')+'</p></div></header>';
+  const u=U(),r=rec(S.userId),rkn=rankOf(S.userId);let wl='';try{wl=S.week<17?weekLabel(S.week):'Season over'}catch(e){}
+  return '<header class="top mast" style="--tc:'+u.color+'">'+badge(u)+'<div class="mast-t"><h1>'+esc(u.name)+'</h1><p>'+esc(S.coach)+' · '+yearOf(S.season)+' season'+(wl?' · '+wl:'')+'</p></div><div class="mast-r"><b class="num">'+r.w+'-'+r.l+'</b><small class="num">'+(rkn<=PN?'No. '+rkn+' · ':'')+r.cw+'-'+r.cl+' '+esc(CONFS[u.conf])+'</small></div></header>';
 }
 function tabs(){
-  const T=[['week','This Week'],['league','League'],['sched','Teams'],['stand','Standings'],['poll','Top '+PN],['bracket','Playoff'],['prog','Program']];
-  return '<nav class="tabs" role="tablist">'+T.map(([k,n])=>'<button role="tab" aria-selected="'+(S.tab===k)+'" data-act="tab" data-t="'+k+'">'+n+'</button>').join('')+'</nav>';
+  const sec=secOf(),T=[['week','Home','week'],['league','League','league'],['rank','Rankings',['poll','stand','bracket'].includes(S.rkSub)?S.rkSub:'poll'],['sched','Teams','sched'],['prog','Program','prog']];
+  return '<nav class="bnav" aria-label="Sections">'+T.map(([k,n,t])=>'<button data-act="tab" data-t="'+t+'" data-nav="'+k+'"'+(sec===k?' aria-current="page"':'')+'><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="currentColor">'+NAVIC[k]+'</svg><span>'+n+'</span></button>').join('')+'</nav>';
+}
+function subnav(){
+  const sec=secOf();
+  if(sec==='rank')return '<nav class="subnav" role="tablist" aria-label="Rankings" data-keep="sub-rank">'+[['poll','Top '+PN],['stand','Standings'],['bracket','Playoff']].map(([k,n])=>'<button role="tab" aria-selected="'+(S.tab===k)+'" data-act="tab" data-t="'+k+'">'+n+'</button>').join('')+'</nav>';
+  const D=SUBS[sec],cur=subOf(sec);
+  return '<nav class="subnav" role="tablist" data-keep="sub-'+sec+'">'+D.o.map(([k,n])=>'<button role="tab" aria-selected="'+(cur===k)+'" data-act="sub" data-k="'+D.k+'" data-v="'+k+'">'+n+'</button>').join('')+'</nav>';
 }
 function hubView(){
   let body='';
-  if(S.tab==='league')body=leagueTab();else if(S.tab==='sched')body=schedTab();else if(S.tab==='stand')body=standTab();else if(S.tab==='poll')body=pollTab();else if(S.tab==='bracket')body=bracketView();else if(S.tab==='prog')body=progTab();else body=weekTab();
+  if(S.tab==='league')body=leagueTab();else if(S.tab==='sched')body=schedTab();else if(S.tab==='stand')body=standTab();else if(S.tab==='poll')body=pollTab();else if(S.tab==='bracket')body=bracketView()+playoffExtras();else if(S.tab==='prog')body=progTab();else body=weekTab();
   const warn=CLOUD.state==='error'&&CLOUD.errAt&&Date.now()-CLOUD.errAt>15000?'<section class="card savewarn"><b>Your account save is not going through.</b><p style="font-size:13px;margin:4px 0 0">Progress is only on this device right now and it keeps retrying. Keep this tab open until this message goes away, and don\'t play on another device in the meantime.</p></section>':'';
-  return header()+warn+tabs()+body;
+  const sec=secOf();
+  return '<div class="hubtop">'+header()+tabs()+'</div>'+subnav()+warn+'<main class="pg pg-'+sec+' pgs-'+(sec==='rank'?S.tab:subOf(sec))+'">'+body+'</main>';
 }
-function recapCard(){
+function playoffExtras(){
+  let h='';if(S.week<3)return h;
+  try{if(S.week<12)h+=bracketCard()}catch(e){}
+  if(S.week<13){const b=bowlProj(),u=S.userId,row=id=>'<span class="'+(id===u?'me':'')+'">'+mlogo(team(id))+''+esc(team(id).abbr)+' <span class="muted num">'+recStr(id)+'</span></span>';
+    h+='<section class="card"><div class="spread"><h3>Bowl projections</h3><span class="muted" style="font-size:12px">Non-playoff bowls</span></div><div class="proj">'+b.bowls.map(x=>'<div class="pj'+(x.a===u||x.b===u?' mine':'')+'"><span class="eyebrow">'+esc(x.name)+'</span><div class="pm">'+row(x.a)+'<span class="muted">vs</span>'+row(x.b)+'</div></div>').join('')+'</div><p class="muted" style="font-size:13px">Your projection: '+esc(myProj()||'No bowl yet. Six wins gets you in.')+'</p></section>'}
+  return h;
+}
+function recapCard(part){
   const r=S.lastRecap;if(!r)return '';
   const o=team(r.opp);
   const g=S.games.find(x=>x.done&&x.wk===r.wk&&(x.h===r.opp||x.a===r.opp)&&(x.h===S.userId||x.a===S.userId)),gi=g?S.games.indexOf(g):-1;
-  return '<section class="card'+(g&&g.riv!=null?' rivcard':'')+'"><div class="recap"><span class="wl '+(r.win?'w':'l')+'">'+(r.win?'W':'L')+'</span><div style="min-width:0"><span class="eyebrow">'+esc(r.tag||weekLabel(r.wk))+' result'+(g&&g.riv!=null?' · '+esc(S.rivals[g.riv].trophy):'')+'</span><h3 class="num">'+U().abbr+' '+r.my+', '+o.abbr+' '+r.th+(r.ot?' (OT)':'')+'</h3><p class="muted" style="font-size:13px">'+(r.home?'vs ':'at ')+esc(o.name)+' · AD confidence '+(r.d>=0?'+':'')+r.d+'</p></div></div>'+(g?'<div class="row"><button class="btn ghost small" data-act="gview" data-g="'+gi+'">Full box score</button></div>'+feedBlock('r'+gi,gameFeedBig(g),S.userId,r.opp,g.riv!=null?'Rivalry reaction':'Fan reaction'):'')+'</section>';
+  return '<section class="card'+(g&&g.riv!=null?' rivcard':'')+'"><div class="recap"><span class="wl '+(r.win?'w':'l')+'">'+(r.win?'W':'L')+'</span><div style="min-width:0"><span class="eyebrow">'+esc(r.tag||weekLabel(r.wk))+' result'+(g&&g.riv!=null?' · '+esc(S.rivals[g.riv].trophy):'')+'</span><h3 class="num">'+U().abbr+' '+r.my+', '+o.abbr+' '+r.th+(r.ot?' (OT)':'')+'</h3><p class="muted" style="font-size:13px">'+(r.home?'vs ':'at ')+esc(o.name)+' · AD confidence '+(r.d>=0?'+':'')+r.d+'</p></div></div>'+(g?'<div class="row"><button class="btn ghost small" data-act="gview" data-g="'+gi+'">Full box score</button>'+(part==='head'?'<button class="btn ghost small" data-act="sub" data-k="hmSub" data-v="buzz">Fan reaction</button>':'')+'</div>'+(part==='head'?'':feedBlock('r'+gi,gameFeedBig(g),S.userId,r.opp,g.riv!=null?'Rivalry reaction':'Fan reaction')):'')+'</section>';
 }
-function weekTab(){
-  const g=userGame(S.week),p=poll();
-  let h='';try{h+=cdCard()}catch(e){}h+=recapCard();try{h+=bigRivSpot()}catch(e){}try{h+=gdCard()}catch(e){}
+function weekTab(sub){
+  const g=userGame(S.week),p=poll();sub=sub||subOf('week');
+  let h='',pre='',buzz='';h+=recapCard('head');try{pre+=bigRivSpot()}catch(e){}try{pre+=gdCard()}catch(e){}try{pre+=cdCard()}catch(e){}
   if(g){
     const u=U(),opp=team(g.h===S.userId?g.a:g.h),home=g.h===S.userId,ol=lastGameOf(opp.id),ql=S.qlen||300,dm=S.defMode||'me';
     const rv=g.riv!=null?S.rivals[g.riv]:null,mp=S.week>=3&&S.week<12?myProj():null;
@@ -5451,8 +5500,8 @@ function weekTab(){
       [['off','Offense','+3 OFF'],['def','Defense','+3 DEF'],['bal','Film study','+1 both']].map(([k,n,s])=>'<button data-act="focus" data-f="'+k+'" aria-pressed="'+(S.focus===k)+'">'+n+'<small>'+s+'</small></button>').join('')+'</div></div>'+
       '<div><p class="eyebrow" style="margin-bottom:8px">Quarter length</p><div class="seg">'+[[180,'3 min','Quick'],[300,'5 min','Standard'],[480,'8 min','Long']].map(([k,n,s])=>'<button data-act="qlen" data-q="'+k+'" aria-pressed="'+(ql===k)+'">'+n+'<small>'+s+'</small></button>').join('')+'</div></div>'+
       '<div><p class="eyebrow" style="margin-bottom:8px">On defense</p><div class="seg two">'+[['me','I call it','Every snap'],['coord','Coordinator','Their drives sim fast']].map(([k,n,s])=>'<button data-act="dmode" data-m="'+k+'" aria-pressed="'+(dm===k)+'">'+n+'<small>'+s+'</small></button>').join('')+'</div></div>'+
-      '<div class="row"><button class="btn" data-act="play">Coach the game</button><button class="btn ghost" data-act="uwatch">Watch it</button><button class="btn ghost" data-act="sim">Sim it</button></div><p class="muted" style="font-size:12.5px">Watch it: your staff calls every play and you can take over whenever you want.</p></section>'+
-      ('<section class="card'+(rv?' rivcard':'')+'">'+feedBlock('w'+S.games.indexOf(g),matchupFeed(g,16),S.userId,opp.id,rv?'Rivalry week buzz':'Pregame buzz')+'</section>');
+      '<div class="row"><button class="btn" data-act="play">Coach the game</button><button class="btn ghost" data-act="uwatch">Watch it</button><button class="btn ghost" data-act="sim">Sim it</button></div><p class="muted" style="font-size:12.5px">Watch it: your staff calls every play and you can take over whenever you want.</p></section>';
+      buzz=('<section class="card'+(rv?' rivcard':'')+'">'+feedBlock('w'+S.games.indexOf(g),matchupFeed(g,16),S.userId,opp.id,rv?'Rivalry week buzz':'Pregame buzz')+'</section>');
   }else{
     let msg='',hd='No game for you';const inF=S.post&&S.post.seeds&&S.post.seeds.includes(S.userId),sdn=inF?S.post.seeds.indexOf(S.userId)+1:0;
     if(S.week===12)msg='You did not win your division, so no '+CONFS[U().conf]+' title game this year. Watch the other conferences settle it.';
@@ -5465,8 +5514,12 @@ function weekTab(){
       (games.length?'<div class="sched">'+games.map(g=>'<div class="g"><span class="wk">'+esc(g.tag.replace(' Championship','').replace('Playoff ',''))+'</span><span>'+rk(g.h,p)+team(g.h).abbr+' vs '+rk(g.a,p)+team(g.a).abbr+'</span><span class="muted num">'+spreadText(g)+'</span></div>').join('')+'</div>':'')+
       '<div class="row">'+(S.week>=12&&S.games.some(g=>g.wk===S.week&&!g.done)?'<button class="btn ghost" data-act="tab" data-t="bracket">'+(S.week===12?'Watch a title game':'Watch a playoff game')+'</button>':'')+'<button class="btn" data-act="advance">'+(S.week===16?'Sim title game':'Sim the week')+'</button></div></section>';
   }
+  {const r=S.lastRecap,rg=r&&S.games.find(x=>x.done&&x.wk===r.wk&&(x.h===r.opp||x.a===r.opp)&&(x.h===S.userId||x.a===S.userId));if(rg)buzz='<section class="card'+(rg.riv!=null?' rivcard':'')+'">'+feedBlock('r'+S.games.indexOf(rg),gameFeedBig(rg),S.userId,r.opp,rg.riv!=null?'Rivalry reaction':'Fan reaction')+'</section>'+buzz}
+  if(sub==='buzz')return (buzz+feedCard(8))||'<section class="card"><h3>Buzz</h3><p class="muted">Quiet out there. The fans wake up once there is a game to argue about.</p></section>';
+  h+=pre;
   if(S.week>=12&&S.post)h+=bracketCard();
-  h+=feedCard(5)+leagueTeaser()+adCard();
+  h+=leagueTeaser()+adCard();
+  if(sub==='all')h+=buzz+feedCard(8);
   return h;
 }
 function lastGameOf(id){
@@ -5490,7 +5543,7 @@ function leagueTeaser(){
   return '<section class="card"><div class="spread"><h3>Around the league</h3><span class="muted" style="font-size:12px">'+(k==='pre'?'Preseason':weekLabel(+k)+' recap')+'</span></div>'+
     items.slice(0,2).map(n=>'<div class="nsm"><span class="tagc t-'+tagKey(n.tag)+'">'+esc(n.tag)+'</span><b>'+esc(n.title)+'</b></div>').join('')+
     (al.length?'<p class="muted" style="font-size:13px">'+al.length+' ranked team'+(al.length>1?'s':'')+' on upset alert this week.</p>':'')+
-    '<button class="btn ghost small" data-act="tab" data-t="league">Open Around the League</button></section>';
+    '<div class="row"><button class="btn ghost small" data-act="tab" data-t="league" data-sub="scores">Scores</button><button class="btn ghost small" data-act="tab" data-t="league" data-sub="news">All the news</button></div></section>';
 }
 function latestNewsKey(){
   if(S.lgWeek!=null&&S.news&&S.news[S.lgWeek])return S.lgWeek;
@@ -5512,39 +5565,87 @@ function expandCard(){
   return '<section class="card expc"><span class="eyebrow">Coming in '+yearOf(S.expandQ.season)+'</span><h3>Expansion: 16 new programs</h3><p class="muted" style="font-size:13px">Every conference grows to 12 teams in two divisions of six. Halstead and Broken Arrow also trade places.</p>'+
     Object.keys(by).map(c=>'<p class="eyebrow" style="margin-top:8px">'+esc(CONFS[c])+'</p><div class="expg">'+by[c].map(x=>'<div class="expt">'+mlogo(tm(x))+'<span><b>'+esc(x[0])+'</b><small class="muted">'+esc(x[2])+' · '+esc(x[5])+(S.divs?' · '+esc(S.divs[c][x[7]]):'')+'</small></span></div>').join('')+'</div>').join('')+'</section>';
 }
-function leagueTab(){
-  const p=poll();let h='';try{h+=expandCard()}catch(e){}try{h+=classicsCard()}catch(e){}
-  const upcoming=S.games.filter(g=>g.wk===S.week&&!g.done);
-  if(upcoming.length&&S.view==='hub'){
-    const gw=gameOfWeek(),al=upsetAlerts();
-    h+='<section class="card"><span class="eyebrow">'+weekLabel(S.week)+' preview</span><h2>The slate</h2>';
-    if(gw){
-      const g=gw.g,H=team(g.h),A=team(g.a),mine=g.h===S.userId||g.a===S.userId,bits=[];
-      if(rec(g.h).l===0&&rec(g.a).l===0&&S.week>2)bits.push('Both teams are unbeaten.');
-      if(g.conf&&S.week>=5)bits.push('Winner grabs control of the '+CONFS[H.conf]+' race.');
-      const hz=heisman().slice(0,5).find(c=>c.t.id===g.h||c.t.id===g.a);if(hz)bits.push('Heisman hopeful '+hz.name+' ('+hz.t.abbr+') gets a national stage.');
-      if(!g.neutral)bits.push('The pregame show is broadcasting live from campus at '+H.name+'.');
-      h+='<div class="gotw"><span class="tagc t-top">'+(mine?'Your game is the game of the week':'Game of the week')+'</span><p class="gotw-t">'+(gw.ar<=PN?'No. '+gw.ar+' ':'')+esc(A.name)+' '+(g.neutral?'vs':'at')+' '+(gw.hr<=PN?'No. '+gw.hr+' ':'')+esc(H.name)+'</p><p class="muted" style="font-size:13.5px">'+recStr(g.a)+' vs '+recStr(g.h)+' · Line '+spreadText(g)+'. '+bits.join(' ')+'</p></div>';
-    }
-    if(al.length){
-      h+='<h3 style="margin-top:4px">Upset alert</h3><div class="alerts">'+al.map(a=>{const F=team(a.fav),D=team(a.dog),mine=a.fav===S.userId||a.dog===S.userId,pct=Math.round(a.pr*100);
-        return '<div class="alert'+(mine?' mine':'')+'"><div class="spread"><b>No. '+a.fr+' '+esc(F.name)+' <span class="muted" style="font-weight:500">'+(a.g.h===a.fav||a.g.neutral?'vs':'at')+'</span> '+esc(D.name)+'</b><span class="num al-p">'+pct+'%</span></div><div class="meter"><i style="width:'+(pct*2)+'%;background:'+(pct>=35?'var(--bad)':'var(--amber)')+'"></i></div><p class="muted" style="font-size:12.5px">'+(mine?(a.fav===S.userId?'That is you. ':'That could be you. '):'')+a.why.slice(0,2).join('. ')+'.</p></div>'}).join('')+'</div>';
-    }else h+='<p class="muted">No ranked team looks vulnerable this week. Which usually means somebody is about to lose.</p>';
-    h+='</section>';
+/* ---------- Around the League: scores ----------
+   One dense row per game. Default view is the short list that matters (ranked games, your conference, upsets and
+   close ones); chips switch to everything, the Top N, one conference or upsets. Groups fold at SCN rows. */
+const SCN=5;
+function scRow(g,p){
+  const done=g.done,u=S.userId,W=done?winnerOf(g):null;
+  const hr=seedTag(g,g.h)||(done?g.hr:rankOf(g.h,p)),ar=seedTag(g,g.a)||(done?g.ar:rankOf(g.a,p));
+  const side=(id,r,pts)=>'<span class="sct'+(W===id?' win':'')+(id===u?' me':'')+'">'+mlogo(team(id))+'<span class="scn">'+(r&&r<=PN?'<small>'+r+'</small>':'')+esc(team(id).abbr)+'</span><b class="num">'+(done?pts:'')+'</b></span>';
+  let m='';
+  if(done){const dogBy=W===g.h?-(g.pl||0):(g.pl||0),lr=W===g.h?g.ar:g.hr;m=(dogBy>=6&&lr<=PN?'<i class="up">Upset</i>':'')+(g.ot?'<i>OT</i>':'')+(g.riv!=null?'<i class="rv">Riv</i>':'');if(!m)m='<i class="fin">Final</i>'}
+  else m='<i class="ln num">'+esc(spreadText(g))+'</i>';
+  return '<button class="scr'+(g.h===u||g.a===u?' mine':'')+'" data-act="gview" data-g="'+S.games.indexOf(g)+'" aria-label="'+(done?'Box score':'Preview')+': '+esc(team(g.a).name)+' at '+esc(team(g.h).name)+'">'+side(g.a,ar,g.as)+'<span class="scat">'+(g.neutral?'vs':'at')+'</span>'+side(g.h,hr,g.hs)+'<span class="scm">'+m+'</span></button>';
+}
+function scFlags(g,p,al){
+  const done=g.done,hr=done?g.hr:rankOf(g.h,p),ar=done?g.ar:rankOf(g.a,p),f={rk:Math.min(hr||99,ar||99)<=PN,up:false,close:false,min:Math.min(hr||99,ar||99)};
+  if(done){const W=winnerOf(g),dogBy=W===g.h?-(g.pl||0):(g.pl||0),wr=W===g.h?g.hr:g.ar,lr=W===g.h?g.ar:g.hr;f.up=dogBy>=6||(lr<=PN&&!(wr<=PN)&&dogBy>0);f.close=Math.abs(g.hs-g.as)<=7||!!g.ot}
+  else{f.up=al.some(a=>a.g===g);f.close=Math.abs(spreadMargin(g))<3}
+  return f;
+}
+function scoresView(p){
+  const u=S.userId,uc=U().conf,hub=S.view==='hub';
+  const doneW=[...new Set(S.games.filter(g=>g.done).map(g=>g.wk))].sort((a,b)=>b-a),live=hub&&S.games.some(g=>g.wk===S.week&&!g.done);
+  let w=S.scWeek;if(w==null||w==='now'||!doneW.includes(+w))w=live?'now':doneW.length?doneW[0]:'now';
+  const wk=w==='now'?S.week:+w,al=w==='now'?upsetAlerts():[];
+  const gs=S.games.filter(g=>g.wk===wk&&(w==='now'||g.done)),FL=new Map(gs.map(g=>[g,scFlags(g,p,al)]));
+  gs.sort((a,b)=>FL.get(a).min-FL.get(b).min||(b.h===u||b.a===u)-(a.h===u||a.a===u));
+  const wkn=k=>k<12?'Wk '+(k+1):['Champ','Rd 1','QF','SF','Title'][k-12]||'Post';
+  let h='';
+  if(doneW.length||live)h+='<div class="chips wk scwk" data-keep="scw">'+(live?'<button class="chip'+(w==='now'?' amber on':'')+'" data-act="scw" data-w="now">This week</button>':'')+doneW.filter(k=>!(live&&k===S.week)).map(k=>'<button class="chip'+(w!=='now'&&+w===k?' amber on':'')+'" data-act="scw" data-w="'+k+'">'+wkn(k)+'</button>').join('')+'</div>';
+  if(!gs.length)return h+'<section class="card"><h3>Scores</h3><p class="muted">No games on the board yet. Scores land here as soon as the first week is played.</p></section>';
+  const inConf=(g,c)=>team(g.h).conf===c||team(g.a).conf===c;
+  const F=[['top','Top games'],['all','All '+gs.length],['rk','Top '+PN],['c'+uc,CONFS[uc]]].concat(CONFS.map((n,c)=>['c'+c,n]).filter((x,c)=>c!==uc),[['up',w==='now'?'Upset alert':'Upsets']]);
+  let f=S.lgF||'top';if(!F.some(x=>x[0]===f))f='top';
+  h+='<div class="chips wk scf" data-keep="scf" role="group" aria-label="Filter games">'+F.map(([k,n])=>'<button class="chip'+(f===k?' amber on':'')+'" aria-pressed="'+(f===k)+'" data-act="lgf" data-f="'+k+'">'+esc(n)+'</button>').join('')+'</div>';
+  const open=S.lgOpen||{},rows=(key,title,list,cap)=>{if(!list.length)return '';const all=!cap||open[key]||list.length<=cap+1,show=all?list:list.slice(0,cap);
+    return '<div class="scg">'+(title?'<div class="scgh"><span>'+esc(title)+'</span><span class="num">'+list.length+'</span></div>':'')+'<div class="scl">'+show.map(g=>scRow(g,p)).join('')+'</div>'+(list.length>cap+1&&cap?'<button class="scmore" data-act="lgopen" data-k="'+key+'">'+(all?'Show fewer':'Show '+(list.length-cap)+' more')+'</button>':'')+'</div>'};
+  let body='';
+  if(f==='top'){
+    const seen=new Set(),take=fn=>{const l=gs.filter(g=>!seen.has(g)&&fn(g));l.forEach(g=>seen.add(g));return l};
+    const mine=take(g=>g.h===u||g.a===u),rkd=take(g=>FL.get(g).rk),cf=take(g=>inConf(g,uc)),wild=take(g=>FL.get(g).up||FL.get(g).close);
+    body=rows('mine','',mine,0)+rows('rk','Top '+PN+' matchups',rkd,SCN)+rows('cf',CONFS[uc],cf,SCN)+rows('wild',w==='now'?'Upset alert and toss-ups':'Upsets and close ones',wild,SCN);
+    const rest=gs.length-seen.size;if(rest>0)body+='<button class="scmore all" data-act="lgf" data-f="all">'+rest+' more game'+(rest>1?'s':'')+' · show all '+gs.length+'</button>';
+  }else if(f==='all'){
+    const post=gs.filter(g=>g.tag&&g.wk>=12),reg=gs.filter(g=>!post.includes(g));
+    body=rows('post','',post,0)+CONFS.map((n,c)=>rows('a'+c,n,reg.filter(g=>g.conf&&team(g.h).conf===c),0)).join('')+rows('nc','Non-conference',reg.filter(g=>!g.conf),0);
+  }else{
+    const l=f==='rk'?gs.filter(g=>FL.get(g).rk):f==='up'?gs.filter(g=>FL.get(g).up):gs.filter(g=>inConf(g,+f.slice(1)));
+    body=l.length?rows('f','',l,0):'<p class="muted">'+(f==='up'?(w==='now'?'No ranked team looks vulnerable this week. Which usually means somebody is about to lose.':'Chalk. No upsets this week.'):'No games here this week.')+'</p>';
   }
-  h+=podHTML();
+  h+='<section class="card scard"><div class="spread"><h3>'+(w==='now'?weekLabel(wk)+' slate':weekLabel(wk)+' scores')+'</h3><span class="muted" style="font-size:12px">'+(w==='now'?'Tap a game to preview or watch':'Ranks at kickoff')+'</span></div>'+body+'</section>';
+  if(w==='now'&&hub)h+=slateCard(al);
+  return h;
+}
+function slateCard(al){
+  const gw=gameOfWeek();let h='';
+  h+='<section class="card"><span class="eyebrow">'+weekLabel(S.week)+' preview</span>';
+  if(gw){
+    const g=gw.g,H=team(g.h),A=team(g.a),mine=g.h===S.userId||g.a===S.userId,bits=[];
+    if(rec(g.h).l===0&&rec(g.a).l===0&&S.week>2)bits.push('Both teams are unbeaten.');
+    if(g.conf&&S.week>=5)bits.push('Winner grabs control of the '+CONFS[H.conf]+' race.');
+    const hz=heisman().slice(0,5).find(c=>c.t.id===g.h||c.t.id===g.a);if(hz)bits.push('Heisman hopeful '+hz.name+' ('+hz.t.abbr+') gets a national stage.');
+    if(!g.neutral)bits.push('The pregame show is broadcasting live from campus at '+H.name+'.');
+    h+='<div class="gotw"><span class="tagc t-top">'+(mine?'Your game is the game of the week':'Game of the week')+'</span><p class="gotw-t">'+(gw.ar<=PN?'No. '+gw.ar+' ':'')+esc(A.name)+' '+(g.neutral?'vs':'at')+' '+(gw.hr<=PN?'No. '+gw.hr+' ':'')+esc(H.name)+'</p><p class="muted" style="font-size:13.5px">'+recStr(g.a)+' vs '+recStr(g.h)+' · Line '+spreadText(g)+'. '+bits.join(' ')+'</p></div>';
+  }
+  if(al.length){
+    {const op=(S.lgOpen||{}).al,sh=op?al:al.slice(0,2);h+='<div class="spread"><h3 style="margin-top:4px">Upset alert</h3><span class="muted num" style="font-size:12px">'+al.length+' ranked team'+(al.length>1?'s':'')+'</span></div><div class="alerts">'+sh.map(a=>{const F=team(a.fav),D=team(a.dog),mine=a.fav===S.userId||a.dog===S.userId,pct=Math.round(a.pr*100);
+      return '<div class="alert'+(mine?' mine':'')+'"><div class="spread"><b>No. '+a.fr+' '+esc(F.name)+' <span class="muted" style="font-weight:500">'+(a.g.h===a.fav||a.g.neutral?'vs':'at')+'</span> '+esc(D.name)+'</b><span class="num al-p">'+pct+'%</span></div><div class="meter"><i style="width:'+(pct*2)+'%;background:'+(pct>=35?'var(--bad)':'var(--amber)')+'"></i></div><p class="muted" style="font-size:12.5px">'+(mine?(a.fav===S.userId?'That is you. ':'That could be you. '):'')+a.why.slice(0,2).join('. ')+'.</p></div>'}).join('')+'</div>'+(al.length>2?'<button class="scmore" data-act="lgopen" data-k="al">'+(op?'Show fewer':'Show '+(al.length-2)+' more')+'</button>':'')}
+  }else h+='<p class="muted">No ranked team looks vulnerable this week. Which usually means somebody is about to lose.</p>';
+  return h+'</section>';
+}
+function leagueTab(sub){
+  sub=sub||subOf('league');const on=k=>sub==='all'||sub===k;
+  const p=poll();let h='';if(on('scores'))h+=scoresView(p);if(on('hist')){try{h+=expandCard()}catch(e){}try{h+=classicsCard()}catch(e){}}
   const keys=Object.keys(S.news||{}).sort((a,b)=>a==='pre'?-1:b==='pre'?1:+a-+b),cur=latestNewsKey(),items=(S.news&&S.news[cur])||[];
-  if(keys.length){
-    h+='<div class="chips wk">'+keys.map(k=>'<button class="chip'+(k===cur?' amber':'')+'" data-act="lgw" data-w="'+k+'">'+(k==='pre'?'Preseason':+k<12?'Wk '+(+k+1):['Champ','Rd 1','QF','SF','Title'][+k-12]||'Post')+'</button>').join('')+'</div>';
+  if(on('news')&&keys.length){
+    h+='<div class="chips wk" data-keep="lgw">'+keys.map(k=>'<button class="chip'+(k===cur?' amber':'')+'" data-act="lgw" data-w="'+k+'">'+(k==='pre'?'Preseason':+k<12?'Wk '+(+k+1):['Champ','Rd 1','QF','SF','Title'][+k-12]||'Post')+'</button>').join('')+'</div>';
     h+='<section class="card"><span class="eyebrow">'+(cur==='pre'?'Preseason storylines':weekLabel(+cur)+' storylines')+'</span>'+
       (items.length?items.map((n,i)=>'<article class="news'+(i===0?' lead':'')+'" style="--tc:'+team(n.team).color+'"><span class="tagc t-'+tagKey(n.tag)+'">'+esc(n.tag)+'</span><h3>'+esc(n.title)+'</h3><p>'+esc(n.body)+'</p></article>').join(''):'<p class="muted">A quiet week. Nobody did anything strange.</p>')+'</section>';
-    if(cur!=='pre'){
-      const gs=S.games.filter(g=>g.wk===+cur&&g.done).sort((a,b)=>Math.min(a.hr,a.ar)-Math.min(b.hr,b.ar));
-      h+='<section class="card"><div class="spread"><h3>Scoreboard</h3><span class="muted" style="font-size:12px">'+gs.length+' games · ranks at kickoff</span></div><div class="gcs">'+gs.slice(0,S.lgAll?99:8).map(g=>gameCard(g,p,false)).join('')+'</div>'+(gs.length>8?'<button class="btn ghost small" data-act="lgall">'+(S.lgAll?'Show fewer':'Show all '+gs.length+' games')+'</button>':'')+'</section>';
-    }
   }
-  {const fin=S.games.filter(g=>g.wk===S.week&&g.done&&g.h!==S.userId&&g.a!==S.userId);if(fin.length&&S.view==='hub')h+='<section class="card"><div class="spread"><h3>Already final this week</h3><span class="muted" style="font-size:12px">'+fin.length+' game'+(fin.length===1?'':'s')+'</span></div><div class="gcs">'+fin.map(g=>gameCard(g,p,false)).join('')+'</div></section>'}
-  if(upcoming.length&&S.view==='hub')h+='<section class="card"><div class="spread"><h3>This week\'s games</h3><span class="muted" style="font-size:12px">'+upcoming.length+' games</span></div><div class="gcs">'+upcoming.sort((a,b)=>Math.min(rankOf(a.h,p),rankOf(a.a,p))-Math.min(rankOf(b.h,p),rankOf(b.a,p))).slice(0,S.lgAll?99:8).map(g=>gameCard(g,p,true)).join('')+'</div>'+(upcoming.length>8?'<button class="btn ghost small" data-act="lgall">'+(S.lgAll?'Show fewer':'Show all '+upcoming.length+' games')+'</button>':'')+'</section>';
+  if(on('news'))h+=podHTML();
+  if(on('people')){
   const hz=heisman().slice(0,6);
   h+='<section class="card"><h3>Heisman watch</h3><ol class="rank">'+hz.map((c,i)=>'<li class="'+(c.mine?'me':'')+'"><span class="rn">'+(i+1)+'</span><span style="min-width:0"><b>'+esc(c.name)+'</b> <span class="muted">'+c.pos+', '+esc(c.t.name)+(c.out?' · injured':'')+'</span><br><span class="muted num" style="font-size:12.5px">'+c.yds.toLocaleString()+' yds · '+c.td+' TD · team '+recStr(c.t.id)+'</span></span></li>').join('')+'</ol></section>';
   const seat=S.teams.filter(t=>t.id!==S.userId&&t.coach.heat>=55).sort((a,b)=>b.coach.heat-a.coach.heat).slice(0,5);
@@ -5555,12 +5656,8 @@ function leagueTab(){
     h+='<section class="card"><h3>Best coaches in the league</h3><div class="sched">'+top.map(t=>'<div class="g"><span class="wk">'+mlogo(t)+'</span><span style="min-width:0"><b>'+esc(t.coach.name)+'</b> <span class="muted">· <button class="lnk" data-act="vsched" data-id="'+t.id+'">'+esc(t.name)+'</button> · yr '+((t.coach.yrs||0)+1)+(t.coach.ring!=null?' · title winner':'')+'</span></span>'+rtTag(t)+'</div>').join('')+'</div><p class="muted" style="font-size:12px;margin-top:6px">Coach rating moves each year with results against preseason expectations. Higher rated coaches win more, recruit better and develop players faster.</p></section>'}
   const inj=(S.inj||[]).filter(j=>j.wk>0&&(j.team===S.userId||rankOf(j.team,p)<=PN||j.starOut)).sort((a,b)=>rankOf(a.team,p)-rankOf(b.team,p)).slice(0,8);
   h+='<section class="card"><h3>Injury report</h3>'+(inj.length?'<div class="sched">'+inj.map(j=>'<div class="g"><span class="wk">'+j.pos+'</span><span style="min-width:0">'+esc(j.team===S.userId?j.name:short(j.name))+' <span class="muted">· '+esc(team(j.team).name)+'</span></span><span class="muted num" style="font-size:12.5px">'+(j.wk>=60?'Season':j.wk+' wk')+'</span></div>').join('')+'</div>':'<p class="muted">Everyone who matters is healthy. For now.</p>')+'</section>';
-  h+=champListHTML();
-  if(S.week>=3){
-    h+=bracketCard();
-    if(S.week<13){const b=bowlProj(),u=S.userId,row=id=>'<span class="'+(id===u?'me':'')+'">'+mlogo(team(id))+''+esc(team(id).abbr)+' <span class="muted num">'+recStr(id)+'</span></span>';
-      h+='<section class="card"><div class="spread"><h3>Bowl projections</h3><span class="muted" style="font-size:12px">Non-playoff bowls</span></div><div class="proj">'+b.bowls.map(x=>'<div class="pj'+(x.a===u||x.b===u?' mine':'')+'"><span class="eyebrow">'+esc(x.name)+'</span><div class="pm">'+row(x.a)+'<span class="muted">vs</span>'+row(x.b)+'</div></div>').join('')+'</div><p class="muted" style="font-size:13px">Your projection: '+esc(myProj()||'No bowl yet. Six wins gets you in.')+'</p></section>'}
   }
+  if(on('hist'))h+=champListHTML();
   return h;
 }
 function aroundLeague(p){
@@ -5572,18 +5669,18 @@ function aroundLeague(p){
     return '<div class="g"><span class="wk">'+(g.tag?esc(g.tag.split(' ')[0]):'Final')+'</span><span style="min-width:0">'+(hw?'<b>':'')+rk(g.h,p)+team(g.h).abbr+' '+g.hs+(hw?'</b>':'')+', '+(!hw?'<b>':'')+rk(g.a,p)+team(g.a).abbr+' '+g.as+(!hw?'</b>':'')+(g.ot?' OT':'')+'</span><span></span></div>';
   }).join('')+'</div></section>';
 }
-function schedTab(){
-  const p=poll(),u=S.schedTeam!=null&&team(S.schedTeam)?S.schedTeam:S.userId,T=team(u),r=rec(u),mine=u===S.userId;
+function schedTab(sub){
+  sub=sub||subOf('sched');const on=k=>sub==='all'||sub===k;const p=poll(),u=S.schedTeam!=null&&team(S.schedTeam)?S.schedTeam:S.userId,T=team(u),r=rec(u),mine=u===S.userId;
   const gs=S.games.filter(g=>g.h===u||g.a===u).sort((a,b)=>a.wk-b.wk);
   const opts=[0,1,2,3].map(c=>'<optgroup label="'+esc(CONFS[c])+'">'+S.teams.filter(t=>t.conf===c).map(t=>'<option value="'+t.id+'"'+(t.id===u?' selected':'')+'>'+esc(t.name)+(t.id===S.userId?' (you)':'')+'</option>').join('')+'</optgroup>').join('');
   let h='<section class="card"><label class="lbl">Pick any team<select id="schedSel" data-sched="1">'+opts+'</select></label>'+(mine?'':'<button class="btn ghost small" data-act="vsched" data-id="'+S.userId+'">Back to my schedule</button>')+'</section>';
   const rvs=rivalsOf(u).map(x=>team(x.a===u?x.b:x.a).abbr);
   h+='<section class="card"><div class="top">'+badge(T)+'<span class="lgo altlg">'+logoSVG(T,'alt')+'</span>'+'<div style="min-width:0"><h2>'+esc(T.name)+'</h2><p class="muted" style="font-size:13px">'+esc(T.mascot)+' · '+r.w+'-'+r.l+' ('+r.cw+'-'+r.cl+' '+esc(CONFS[T.conf])+(DIVS&&T.div!=null?' '+esc(DIVS[T.conf][T.div]):'')+')'+(rankOf(u,p)<=PN?' · No. '+rankOf(u,p):'')+' · OFF '+T.off+' · DEF '+T.def+' · SOS '+ordN(sosRanks()[u])+' of '+S.teams.length+(mine?'':' · Coach '+esc(T.coach?T.coach.name:'')+' '+rtTag(T))+(rvs.length?' · Rivals: '+rvs.join(', '):'')+'</p></div></div>'+identBlock(u);
-  h+='</section><section class="card"><div class="spread"><h3>'+(mine?'Your fans':esc(T.name)+' fans')+'</h3><button class="lnk" data-act="refeed">Refresh</button></div>'+moodHTML(u)+postsHTML(mine?[...(S.feed||[]).filter(p=>p.team===u&&(p.season===S.season||p.season==null)).slice(0,3),...teamFeed(u,6)].slice(0,8):teamFeed(u,7))+'</section>';
-  h+=pastHTML(T);
-  {const L=(S.logos||{})[T.abbr]||{},box=(m,lab,on)=>'<div class="lgup"><span class="lgo">'+logoSVG(T,m)+'</span><small class="muted">'+lab+(on?' · custom':'')+'</small><label class="btn ghost small">Upload<input type="file" accept="image/png,image/webp,image/jpeg,image/svg+xml" data-logo="'+(m==='alt'?'a':'p')+'" data-ab="'+esc(T.abbr)+'" hidden></label></div>';
+  h+='</section>';if(on('fans'))h+='<section class="card"><div class="spread"><h3>'+(mine?'Your fans':esc(T.name)+' fans')+'</h3><button class="lnk" data-act="refeed">Refresh</button></div>'+moodHTML(u)+postsHTML(mine?[...(S.feed||[]).filter(p=>p.team===u&&(p.season===S.season||p.season==null)).slice(0,3),...teamFeed(u,6)].slice(0,8):teamFeed(u,7))+'</section>';
+  if(on('hist'))h+=pastHTML(T);
+  if(on('logo')){const L=(S.logos||{})[T.abbr]||{},box=(m,lab,on)=>'<div class="lgup"><span class="lgo">'+logoSVG(T,m)+'</span><small class="muted">'+lab+(on?' · custom':'')+'</small><label class="btn ghost small">Upload<input type="file" accept="image/png,image/webp,image/jpeg,image/svg+xml" data-logo="'+(m==='alt'?'a':'p')+'" data-ab="'+esc(T.abbr)+'" hidden></label></div>';
     h+='<section class="card"><div class="spread"><h3>Team logo</h3>'+(L.p||L.a?'<button class="lnk" data-act="logoreset" data-ab="'+esc(T.abbr)+'">Reset to original</button>':'')+'</div><p class="muted" style="font-size:12.5px">Upload your own image for '+esc(T.name)+'. Transparent PNGs look best. Extra empty space gets trimmed automatically.</p><div class="lgups">'+box(undefined,'Primary',!!L.p)+box('alt','End zone',!!L.a)+'</div><p id="lgmsg" class="muted" style="font-size:12px"></p></section>'}
-  h+='<section class="card"><h3>'+S.season+' schedule</h3><div class="sched">'+gs.map(g=>{
+  if(on('sched'))h+='<section class="card"><h3>'+yearOf(S.season)+' schedule</h3><div class="sched">'+gs.map(g=>{
     const home=g.h===u,o=team(home?g.a:g.h);
     let res='<span class="muted num">'+(g.wk===S.week&&!g.done?'Next':'')+'</span>';
     if(g.done){const my=home?g.hs:g.as,th=home?g.as:g.hs;res='<button class="lnk res '+(my>th?'w':'l')+' num" data-act="gview" data-g="'+S.games.indexOf(g)+'">'+(my>th?'W':'L')+' '+my+'-'+th+(g.ot?' OT':'')+'</button>'}
@@ -5743,21 +5840,21 @@ function staffCard(inSummary){
     const cs=C&&C[k]||[];return '<div class="stf open"><span class="eyebrow">'+lab+' · Opening</span>'+(cs.length?cs.map((x,i)=>'<div class="spread" style="gap:8px;padding:5px 0"><span style="min-width:0"><b>'+esc(x.name)+'</b><br><small class="muted">'+esc(L[x.style].n)+' · '+x.r+' rating</small></span><button class="btn ghost small" data-act="shire" data-k="'+k+'" data-i="'+i+'">Hire</button></div>').join(''):'<span class="muted">Hiring opens at season\'s end.</span>')+'</div>'};
   return '<section class="card"><span class="eyebrow">Coaching staff</span><h3>Your coordinators</h3>'+N.map(x=>'<p style="font-size:13px;margin:4px 0"><b>'+esc(x.name)+'</b> '+(x.to!=null?'was hired as head coach at '+esc(team(x.to).name)+'.':'left for a job elsewhere.')+'</p>').join('')+one('oc')+one('dc')+'</section>';
 }
-function progTab(){
-  const u=U();
-  let h='<section class="card"><h3>'+esc(u.name)+' '+esc(u.mascot)+'</h3><div class="chips"><span class="chip">OFF '+u.off+'</span><span class="chip">DEF '+u.def+'</span><span class="chip">Prestige '+u.prestige+' · '+tier(u.prestige)+'</span><span class="chip">SOS '+ordN(sosRanks()[u.id])+' of '+S.teams.length+'</span>'+(u.clsRank?'<span class="chip">Recruiting class No. '+u.clsRank+'</span>':'')+'<span class="chip">'+CONFS[u.conf]+'</span></div>';
-  h+=S.stars.map(s=>'<div class="star"><div style="min-width:0"><b>'+s.pos+' #'+(s.num||'')+' '+esc(s.name)+'</b> <span class="muted">'+YR[s.yr]+' · '+s.ovr+' OVR</span><br><span class="muted num" style="font-size:13px">'+starLine(s)+'</span></div></div>').join('')+'</section>';
-  if(u.hist)h+='<section class="card"><span class="eyebrow">Program history</span><p>'+esc(histLine(u))+'</p><div class="row"><button class="btn ghost small" data-act="phist" data-id="'+u.id+'">Full program history</button></div></section>';
+function progTab(sub){
+  const u=U();sub=sub||subOf('prog');const on=k=>sub==='all'||sub===k;
+  let h='';if(on('team')){h+='<section class="card"><h3>'+esc(u.name)+' '+esc(u.mascot)+'</h3><div class="chips"><span class="chip">OFF '+u.off+'</span><span class="chip">DEF '+u.def+'</span><span class="chip">Prestige '+u.prestige+' · '+tier(u.prestige)+'</span><span class="chip">SOS '+ordN(sosRanks()[u.id])+' of '+S.teams.length+'</span>'+(u.clsRank?'<span class="chip">Recruiting class No. '+u.clsRank+'</span>':'')+'<span class="chip">'+CONFS[u.conf]+'</span></div>';
+  h+=S.stars.map(s=>'<div class="star"><div style="min-width:0"><b>'+s.pos+' #'+(s.num||'')+' '+esc(s.name)+'</b> <span class="muted">'+YR[s.yr]+' · '+s.ovr+' OVR</span><br><span class="muted num" style="font-size:13px">'+starLine(s)+'</span></div></div>').join('')+'</section>';}
+  if(on('hist')&&u.hist)h+='<section class="card"><span class="eyebrow">Program history</span><p>'+esc(histLine(u))+'</p><div class="row"><button class="btn ghost small" data-act="phist" data-id="'+u.id+'">Full program history</button></div></section>';
   const rv=rivOf(S.userId);
   const all=rivalsOf(S.userId);
-  if(all.length){h+='<section class="card rivcard"><span class="eyebrow">Rivalries</span>'+all.map(r=>{const o=r.a===S.userId?r.b:r.a;return '<button class="rivbtn" data-act="rview" data-r="'+S.rivals.indexOf(r)+'" aria-label="'+esc(r.trophy)+' history"><div class="trophy"><span class="tro"><svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path fill="#f2b84b" d="M6 3h12v3h3v2a5 5 0 0 1-5 5h-.4A6 6 0 0 1 13 15.9V18h3v3H8v-3h3v-2.1A6 6 0 0 1 8.4 13H8a5 5 0 0 1-5-5V6h3V3zM5 8a3 3 0 0 0 1 2.2V8H5zm13 0v2.2A3 3 0 0 0 19 8h-1z"/></svg></span><div><b>'+esc(r.trophy)+'</b><span class="muted">'+RTYPE[r.type||'main']+' vs '+esc(team(o).name)+' · '+seriesTxt(r,S.userId)+' · '+(r.holder==null?'Never played for it yet':r.holder===S.userId?'In your trophy case':'In their trophy case')+(r.last&&r.last.s?' · Last: '+esc(team(r.last.w).abbr)+' '+r.last.s:'')+' · <span class="amber">History ›</span></span></div></div></button>'}).join('')+'</section>'}
+  if(on('hist')&&all.length){h+='<section class="card rivcard"><span class="eyebrow">Rivalries</span>'+all.map(r=>{const o=r.a===S.userId?r.b:r.a;return '<button class="rivbtn" data-act="rview" data-r="'+S.rivals.indexOf(r)+'" aria-label="'+esc(r.trophy)+' history"><div class="trophy"><span class="tro"><svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path fill="#f2b84b" d="M6 3h12v3h3v2a5 5 0 0 1-5 5h-.4A6 6 0 0 1 13 15.9V18h3v3H8v-3h3v-2.1A6 6 0 0 1 8.4 13H8a5 5 0 0 1-5-5V6h3V3zM5 8a3 3 0 0 0 1 2.2V8H5zm13 0v2.2A3 3 0 0 0 19 8h-1z"/></svg></span><div><b>'+esc(r.trophy)+'</b><span class="muted">'+RTYPE[r.type||'main']+' vs '+esc(team(o).name)+' · '+seriesTxt(r,S.userId)+' · '+(r.holder==null?'Never played for it yet':r.holder===S.userId?'In your trophy case':'In their trophy case')+(r.last&&r.last.s?' · Last: '+esc(team(r.last.w).abbr)+' '+r.last.s:'')+' · <span class="amber">History ›</span></span></div></div></button>'}).join('')+'</section>'}
 
-  try{if(S.week<12)h+=recCard()}catch(e){}
-  try{h+=lockerCard()+staffCard(false)}catch(e){}
-  try{h+=hofCard()}catch(e){}
-  h+=adCard();
-  h+='<section class="card"><h3>Career · '+esc(S.coach)+'</h3>'+(S.history.length?'<div class="sched">'+S.history.map(x=>'<div class="g"><span class="wk">'+yearOf(x.season)+'</span><span style="min-width:0">'+x.abbr+' · <b class="num">'+x.w+'-'+x.l+'</b>'+(x.rank<=PN?' · #'+x.rank:'')+'<br><small class="muted">'+esc(x.line)+'</small></span><span></span></div>').join('')+'</div>':'<p class="muted">Season one is underway. Results land here.</p>')+
-    syncLine()+(CLOUD.db?'<div class="row"><button class="btn ghost small" data-act="snaps">Restore from account backups</button></div>':'')+devPrevBtn()+'<details class="bk"><summary>Backup code</summary><p class="muted" style="font-size:12.5px">Copy this code somewhere safe. Paste it back here on any device to restore your league and career.</p><textarea id="bkOut" readonly rows="3"></textarea><div class="row"><button class="btn ghost small" data-act="bk-copy">Copy backup code</button></div><textarea id="bkIn" rows="3" placeholder="Paste a backup code to restore"></textarea><div class="row"><button class="btn ghost small" data-act="bk-restore">Restore from code</button></div><p class="muted" id="bkMsg" style="font-size:12.5px"></p>'+(hasPrev()?'<button class="btn ghost small" data-act="bk-prev">Restore this device\'s previous save</button>':'')+'</details>'+(S.lname!=='Church League'?'<button class="btn small" data-act="lb-open">Build and play the Church League</button>':'<button class="btn ghost small" data-act="lb-open">League builder</button>')+'<button class="btn ghost small" data-act="reset">'+(confirmReset?'Tap again to erase this career':'Start a new career')+'</button></section>';
+  if(on('rec')){try{if(S.week<12)h+=recCard()}catch(e){}if(S.week>=12)h+='<section class="card"><h3>Recruiting trail</h3><p class="muted">The trail is quiet until the season ends. Signing Day and the transfer portal open in the season wrap-up.</p>'+(u.clsRank?'<div class="chips"><span class="chip">Last class ranked No. '+u.clsRank+'</span></div>':'')+'</section>'}
+  if(on('team'))try{h+=lockerCard()+staffCard(false)}catch(e){}
+  if(on('hist'))try{h+=hofCard()}catch(e){}
+  if(on('office'))h+=adCard();
+  if(on('hist'))h+='<section class="card"><h3>Career · '+esc(S.coach)+'</h3>'+(S.history.length?'<div class="sched">'+S.history.map(x=>'<div class="g"><span class="wk">'+yearOf(x.season)+'</span><span style="min-width:0">'+x.abbr+' · <b class="num">'+x.w+'-'+x.l+'</b>'+(x.rank<=PN?' · #'+x.rank:'')+'<br><small class="muted">'+esc(x.line)+'</small></span><span></span></div>').join('')+'</div>':'<p class="muted">Season one is underway. Results land here.</p>')+'</section>';
+  if(on('office'))h+='<section class="card"><h3>Saves and league</h3>'+syncLine()+(CLOUD.db?'<div class="row"><button class="btn ghost small" data-act="snaps">Restore from account backups</button></div>':'')+devPrevBtn()+'<details class="bk"><summary>Backup code</summary><p class="muted" style="font-size:12.5px">Copy this code somewhere safe. Paste it back here on any device to restore your league and career.</p><textarea id="bkOut" readonly rows="3"></textarea><div class="row"><button class="btn ghost small" data-act="bk-copy">Copy backup code</button></div><textarea id="bkIn" rows="3" placeholder="Paste a backup code to restore"></textarea><div class="row"><button class="btn ghost small" data-act="bk-restore">Restore from code</button></div><p class="muted" id="bkMsg" style="font-size:12.5px"></p>'+(hasPrev()?'<button class="btn ghost small" data-act="bk-prev">Restore this device\'s previous save</button>':'')+'</details>'+(S.lname!=='Church League'?'<button class="btn small" data-act="lb-open">Build and play the Church League</button>':'<button class="btn ghost small" data-act="lb-open">League builder</button>')+'<button class="btn ghost small" data-act="reset">'+(confirmReset?'Tap again to erase this career':'Start a new career')+'</button></section>';
   return h;
 }
 /* ---------- weekly Top 15 countdown show ---------- */
@@ -5998,15 +6095,20 @@ function renderGame(){
 }
 function render(){
   const app=$('#app');
-  if(S&&S.view==='game'&&G){renderGame();return}
+  if(S&&S.view==='game'&&G){app._hv='game';if(app.classList&&app.classList.toggle)app.classList.toggle('hub',false);renderGame();return}
   stopLoop();SC.cv=null;
-  if(BV.open){app.innerHTML=builderView()+syncModal();return}
-  if(!S||S.view==='setup')app.innerHTML=setupView();
-  else if(S.view==='summary')app.innerHTML=summaryView();
-  else if(S.view==='presser'&&S.presser)app.innerHTML=presserView();
-  else if((S.view==='selection'||S.selPending)&&S.post&&S.post.seeds&&S.post.seeds.length===12){if(S.selPending){S.selPending=false;S.sel={i:0};S.view='selection';save()}app.innerHTML=selectionView()}
-  else{S.view='hub';app.innerHTML=hubView()+(S.gview!=null?gameModal():'')+(S.clview!=null?classicModal():'')+histModal()+rivModal()+snapModal()}
-  if(SYNCQ)app.insertAdjacentHTML('beforeend',syncModal());
+  let H;
+  if(BV.open)H=builderView();
+  else if(!S||S.view==='setup')H=setupView();
+  else if(S.view==='summary')H=summaryView();
+  else if(S.view==='presser'&&S.presser)H=presserView();
+  else if((S.view==='selection'||S.selPending)&&S.post&&S.post.seeds&&S.post.seeds.length===12){if(S.selPending){S.selPending=false;S.sel={i:0};S.view='selection';save()}H=selectionView()}
+  else{S.view='hub';H=hubView()+(S.gview!=null?gameModal():'')+(S.clview!=null?classicModal():'')+histModal()+rivModal()+snapModal()}
+  if(SYNCQ)H+=syncModal();
+  if(RBG&&app._h===H&&app._hv==='page')return; /* background refresh with nothing new: leave the page (open panels, typed text, scroll) alone */
+  const keep={};try{document.querySelectorAll('[data-keep]').forEach(el=>{if(el.scrollLeft)keep[el.dataset.keep]=el.scrollLeft})}catch(e){}
+  app.innerHTML=H;app._h=H;app._hv='page';if(app.classList&&app.classList.toggle)app.classList.toggle('hub',!BV.open&&!!S&&S.view==='hub');
+  try{document.querySelectorAll('[data-keep]').forEach(el=>{const x=keep[el.dataset.keep];if(x)el.scrollLeft=x;const on=el.querySelector('.on,[aria-selected="true"],[aria-pressed="true"]');if(on&&el.scrollWidth>el.clientWidth){const a=on.offsetLeft-el.offsetLeft,b=a+on.offsetWidth;if(a<el.scrollLeft+8)el.scrollLeft=Math.max(0,a-24);else if(b>el.scrollLeft+el.clientWidth-8)el.scrollLeft=b-el.clientWidth+24}})}catch(e){}
 }
 function afterCommit(){
   if(G&&!G.watch&&G.phase==='def'&&(S.defMode||'me')==='coord')coordDrive();
@@ -6042,7 +6144,11 @@ function act(a,d){
       if(!S){const nmv=(($('#coachName')||{}).value||'').trim()||'Coach';const mt=leagueMeta();S={baseYear:2025,coach:nmv,teams:L,season:1,history:[],ad:{conf:60},recruit:'bal',qlen:300,defMode:'me',confs:mt.confs,divs:mt.divs,rivalDefs:mt.rivalDefs,lname:mt.lname,_cid:'c'+Date.now().toString(36)+Math.floor(Math.random()*1e6).toString(36)};CONFS=mt.confs;DIVS=mt.divs}
       else S.ad={conf:55};
       S.userId=id;S.stars=genStars(team(id).prestige);if(S.lname==='Church League'&&LS.loreV1&&!S.loreV1){S.lore=LORE.map(([y,i,note])=>({y,t:i,note}));S.loreHeis=LORE_HEIS.map(([y,name,pos,i])=>({y,name,pos,t:i}));S.loreV1=true;const sw=team(8);if(sw&&sw.coach&&id!==8)sw.coach.name='Andrew Albert'}startSeason();window.scrollTo(0,0);break}
-    case 'tab':S.tab=d.t;window.scrollTo(0,0);break;
+    case 'tab':S.tab=d.t;if(d.t==='poll'||d.t==='stand'||d.t==='bracket')S.rkSub=d.t;if(d.sub&&SUBS[SECOF[d.t]])S[SUBS[SECOF[d.t]].k]=d.sub;window.scrollTo(0,0);break;
+    case 'sub':if(Object.keys(SUBS).some(k=>SUBS[k].k===d.k))S[d.k]=d.v;window.scrollTo(0,0);break;
+    case 'lgf':S.lgF=d.f;S.lgOpen=null;break;
+    case 'scw':S.scWeek=d.w==='now'?null:+d.w;S.lgOpen=null;break;
+    case 'lgopen':S.lgOpen=S.lgOpen||{};if(S.lgOpen[d.k])delete S.lgOpen[d.k];else S.lgOpen[d.k]=1;break;
     case 'lgw':S.lgWeek=d.w;break;
     case 'lgall':S.lgAll=!S.lgAll;break;
     case 'podsel':S.podSel=+d.i;break;
@@ -6051,7 +6157,7 @@ function act(a,d){
     case 'selnext':S.sel.i++;window.scrollTo(0,0);break;
     case 'selprev':S.sel.i=Math.max(0,S.sel.i-1);window.scrollTo(0,0);break;
     case 'selend':S.sel.i=selSteps().length-1;window.scrollTo(0,0);break;
-    case 'selclose':S.view='hub';S.tab='league';window.scrollTo(0,0);break;
+    case 'selclose':S.view='hub';S.tab='bracket';S.rkSub='bracket';window.scrollTo(0,0);break;
     case 'selwatch':S.sel={i:0};S.view='selection';window.scrollTo(0,0);break;
     case 'snapclose':CLOUD.snapOpen=false;break;
     case 'snapuse':{const x=(CLOUD.snaps||[])[+d.i];if(x&&x.c){const keep=S;try{localStorage.setItem('saturday_sideline_v1_backup',JSON.stringify(keep))}catch(e){}S=x.c;G=S.game||null;CLOUD.snapOpen=false;CLOUD.force=true;applyCareerGlobals();save();window.scrollTo(0,0)}break}
@@ -6077,7 +6183,7 @@ function act(a,d){
     case 'gclose':S.gview=null;break;
     case 'histall':S.histAll=!S.histAll;break;
     case 'refeed':S.feedSeed=(S.feedSeed||0)+1;break;
-    case 'vsched':S.gview=null;S.schedTeam=+d.id;S.tab='sched';window.scrollTo(0,0);break;
+    case 'vsched':S.gview=null;S.schedTeam=+d.id;S.tab='sched';S.tmSub=d.sub||'sched';window.scrollTo(0,0);break;
     case 'lg-use':LS.use=d.u;saveLS();L=newLeague();break;
     case 'lb-open':BV.open=true;BV.modal=null;window.scrollTo(0,0);break;
     case 'lb-done':
@@ -6155,7 +6261,7 @@ function act(a,d){
     case 'newjob':offseason();S.view='setup';window.scrollTo(0,0);break;
     case 'reset':if(!confirmReset){confirmReset=true}else{confirmReset=false;try{localStorage.removeItem('saturday_sideline_v1')}catch(e){}S=null;G=null;L=newLeague()}break;
   }
-  save();render();
+  if(NAVACT.has(a))saveNav();else save();render();
 }
 let tapAt=0;
 document.addEventListener('pointerdown',e=>{const b=e.target.closest&&e.target.closest('[data-act="tap"]');if(b&&G&&G.meter){e.preventDefault();tapAt=Date.now();act('tap',{})}});
