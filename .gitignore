@@ -2,3 +2,4 @@ dist/
 tests/t.js
 shots/
 node_modules/
+.claude/
