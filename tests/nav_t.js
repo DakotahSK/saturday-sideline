@@ -20,7 +20,7 @@ await p.addInitScript(s=>{
 await p.goto('file://'+path.join(__dirname,'../dist/preview.html'));
 const ev=(f,a)=>p.evaluate(f,a);
 const state=()=>ev(()=>({tab:S.tab,view:S.view,y:Math.round(window.scrollY),ready:CLOUD.ready,st:CLOUD.state}));
-const tap=async t=>{await ev(t=>{const el=document.querySelector('[data-act="tab"][data-t="'+t+'"]');if(!el)throw new Error('no nav button for '+t);el.click()},t)};
+const tap=async t=>{await ev(t=>{const q=()=>document.querySelector('[data-act="tab"][data-t="'+t+'"]');let el=q();if(!el){const n=document.querySelector('[data-nav="rank"]');if(n)n.click();el=q()}if(!el)throw new Error('no nav button for '+t);el.click()},t)};
 const check=(name,ok,info)=>{if(!ok){fails.push(name);console.log('FAIL',name,JSON.stringify(info||''))}else console.log('pass',name)};
 for(let i=0;i<80;i++){const s=await state();if(s.ready&&s.st==='synced')break;await sleep(250)}
 check('cloud connected',(await state()).ready);
@@ -80,6 +80,18 @@ const wk=await ev(()=>{const c=JSON.parse(JSON.stringify(S));c.tab='week';c.ad.c
 await ev(()=>{CLOUD.sprog=careerProg(S);S._ts=Date.now();cloudPush()});await sleep(1500);
 const s7=await ev(()=>({tab:S.tab,conf:S.ad.conf,mark:S.__mark}));
 check('newer account copy is adopted without moving the page',s7.mark===1&&s7.conf===wk&&s7.tab==='poll',s7);
+
+// 8. sub-tabs: remembered per section, old tab ids still land on the right page, no sideways page scroll on a phone
+await ev(()=>{act('tab',{t:'league'});document.querySelector('[data-act="sub"][data-v="news"]').click();document.querySelector('[data-nav="prog"]').click();document.querySelector('[data-act="sub"][data-v="hist"]').click();document.querySelector('[data-nav="league"]').click()});
+const s8=await ev(()=>({tab:S.tab,lg:S.lgSub,pg:S.pgSub,sel:(document.querySelector('.subnav [aria-selected="true"]')||{}).textContent}));
+check('sub-tab remembered per section',s8.tab==='league'&&s8.lg==='news'&&s8.pg==='hist'&&s8.sel==='News',s8);
+const over=await ev(()=>{const out=[];const pages=[].concat(...Object.keys(SUBS).map(sec=>SUBS[sec].o.map(o=>[sec,SUBS[sec].k,o[0]])),[['poll'],['stand'],['bracket']]);for(const [t,k,v] of pages){S.tab=t;if(k)S[k]=v;render();const d=document.documentElement;if(d.scrollWidth>window.innerWidth+1)out.push(t+'/'+(v||'')+' '+d.scrollWidth);if(!document.querySelector('.bnav [aria-current="page"]'))out.push('no current nav on '+t);document.querySelectorAll('.bnav button,.subnav button').forEach(b=>{const r=b.getBoundingClientRect();if(r.height<40)out.push('small target '+b.textContent+' on '+t)})}return out});
+check('every page fits the phone width',!over.length,over);
+await p.setViewportSize({width:390,height:780});
+const over2=await ev(()=>{const out=[];for(const t of ['week','league','poll','stand','bracket','sched','prog']){S.tab=t;render();const d=document.documentElement;if(d.scrollWidth>window.innerWidth+1)out.push(t+' '+d.scrollWidth)}return out});
+check('fits at 390',!over2.length,over2);
+const old=await ev(()=>{const out=[];for(const t of ['week','league','sched','stand','poll','bracket','prog','nonsense',undefined]){S.tab=t;try{render()}catch(e){out.push(String(t)+': '+e.message)}if(!document.querySelector('.pg'))out.push('no page for '+t)}S.tab='week';render();return out});
+check('old save tab values still open a page',!old.length,old);
 
 await b.close();
 console.log('nav_t errs '+(errs+fails.length)+(fails.length?' FAILED: '+fails.join(' | '):' all navigation checks passed'));
