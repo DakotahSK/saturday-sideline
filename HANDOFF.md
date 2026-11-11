@@ -27,21 +27,27 @@ Read this first when continuing the project in a new chat. It covers where every
 
 ## Status of the overhaul he asked for on 2026-11-11
 
-Shipped in version 92 (on `main`):
-- Scroll bug fixed (a slow cloud save was reloading an older copy and its page). Test: `tests/nav_t.js`.
-- Main pages redesigned: five-section bottom nav (Home, League, Rankings, Teams, Program) with remembered sub-tabs, compact Around the League with filter chips.
-- 12 new Figma logos: FBO, SCB, NWY, SDB, ELL, EBC, HAL, BLV, HOU, WBK, CAL, VIC. Known flaw: VIC has a white fill inside the bow on dark backgrounds; clean up the cutout.
-- Name changes: Berean coach Adam Riveiro, QB Ethan Allen; Jerome coach Tim Knutson, QB Max Levdanskiy. Permanent named Berean players via `team.named`: Clark Allison (RB), Everett Allison (WR), Ollie Forrester (LB). These are in the cloud save and the code.
+All of it is merged into `main` and published (version 95):
+- Scroll bug fixed (stale cloud copy was reloading the old page). Test `nav_t`.
+- Five-section bottom nav with sub-tabs, compact Around the League scores.
+- 12 new Figma logos (FBO, SCB, NWY, SDB, ELL, EBC, HAL, BLV, HOU, WBK, CAL, VIC).
+- Watch-game UI, live fan chat, halftime league recap. Test `half_t`.
+- 13 new plays, 4 defensive calls, grouped play menus, pocket QB, OL/DL blocking pairs, smoother steering. Tests `pocket_t`, `bal_t` (run from tests/).
+- Story arcs (`S.arcs`): hot seat to midseason firing, QB controversy resolution, unbeaten watch, Cinderella, free fall, revenge games, division races, coach feuds, record chases. Storylines card in League > News. Test `story_t`.
+- Stadium variants per team, domes (NWY, LHI, SYR, ESB, SKY, HOU, VIC) with no weather, more pregame shots. Test `dome_t`.
+- Name changes and permanent named Berean players (`team.named`).
 
-Merged into `main`, not yet published:
-- `gameday`: watch-mode UI (speeds, skips, drive tracker, tabbed dock), live fan chat (under 1% repeated lines), halftime show that recaps the league. Test: `tests/half_t.js`. Known leftovers: on desktop the dock sits below the fold; the halftime "By quarter" note has no quarter labels; week-1 cards say "(0-0) leads the division".
-
-In progress on branches (not shipped):
-- `anim-playbook`: 13 new offensive plays, 4 defensive calls, grouped play menus, QB pocket movement, OL/DL blocking pairs, smoother steering. Needs a visual check, tuning, and a merge with main.
-- `stories`: only the `tests/story_t.js` inventory harness so far. Findings: about 109 stories a season but no multi-week arcs, QB controversies never resolve, midseason firings never happen. A design is in the branch's report: `S.arcs` with arc types (hot seat to firing, QB controversy resolution, unbeaten watch, Cinderella, revenge games from past playoff results, division races, coach feuds, record chases, portal sagas), using real league history. Not built.
-- `stadiums`: nothing built yet. Plan: a stadium identity per team derived from the team (architecture, capacity by prestige, scenery by region), domes by abbr (HOU, NWY, LHI, SYR, ESB, VIC, SKY) with a saved `t.dome` override, where `gameEnv` must remove weather for domes (including cached `g.env`), and more pregame camera shots seeded per game and cached in `SC`. Known existing bug: resuming a game mid-intro during the second exterior shot throws in `exCamShot` because `SC.ext` is undefined (black screen until skip).
-
-Still to do after those: merge everything into main, run `./test.sh`, have a fresh agent play through and hunt bugs, publish, then send Dakotah a list of suggestions (he asked for suggestions at the end).
+Known leftovers and polish ideas (not done):
+- VIC logo has a white fill inside the bow on dark backgrounds.
+- On a long dropback the offensive linemen bunch toward the center.
+- Desktop game screen: the field fills the viewport so the play-call panel and watch dock sit below the fold.
+- Score bug is cramped at 430px with ranks and two-digit scores (left alone because of the score-bug rule; ask Dakotah before touching it).
+- Halftime totals can disagree with pass plus rush when sacks are involved; halftime "By quarter" note has no quarter labels.
+- The STOPPED flash can stay on screen at game over after a turnover on downs.
+- Watch speed 1x feels slow; rain is faint during play.
+- Arcs: seat arcs start late for weak teams (some firings at 0-9), free fall triggers at 2-3, unbeaten arcs are the most frequent.
+- Stadium variety mostly shows in pregame; upper decks look blocky at low angles.
+- Dynasty question he asked: prestige drives recruiting (`recruitAll`), so the same programs stay on top. If he wants more turnover: make prestige react faster or weight coaching more in recruiting. Only change this if he asks.
 
 ## Starter prompt for a new chat
 
