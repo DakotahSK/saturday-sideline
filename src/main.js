@@ -125,6 +125,31 @@ const NUMR={QB:[1,19],RB:[20,39],FB:[30,49],X:[1,19],Z:[1,19],S:[1,19],S2:[80,89
 let S=null, G=null, L=null, confirmReset=false;
 
 function save(){if(S)S._ts=Date.now();try{localStorage.setItem('saturday_sideline_v1',JSON.stringify(S))}catch(e){}cloudQueue()}
+/* ---------- navigation state ----------
+   Which page, sub-tab, filter or open sheet you are looking at is view state, not career progress.
+   It is kept on S so it survives a reload, but it is saved on this device only (saveNav) and it is
+   carried over whenever a copy of the career arrives from the account (adoptCareer), so a background
+   sync can never move you to another page. */
+const UIKEYS=['tab','hmSub','lgSub','rkSub','tmSub','pgSub','lgF','scWeek','lgOpen','lgWeek','lgAll','podSel','standConf','schedTeam','histAll','clsAll','phist','phTab','rview','rvTab','gview','clview','cdOpen','tkAll','watchFrom'];
+const NAVACT=new Set(['tab','sub','lgf','scw','lgopen','lgw','lgall','podsel','gview','gclose','clview','clclose','clsall','phist','phclose','rview','rvtab','rvclose','histall','conf','vsched','navmore']);
+function uiSnap(c){const o={};if(c)for(const k of UIKEYS)if(k in c)o[k]=c[k];return o}
+function saveNav(){try{localStorage.setItem('saturday_sideline_v1',JSON.stringify(S))}catch(e){}}
+function adoptCareer(cv){
+  const old=S,same=old&&sameCareer(cv,old),keep=same?uiSnap(old):null;
+  if(same){for(const k of UIKEYS)delete cv[k];Object.assign(cv,keep);
+    const soft=v=>v==='hub'||v==='selection'||v==='summary'||v==null;
+    if(careerProg(cv)===careerProg(old)&&soft(old.view)&&soft(cv.view)&&!(cv.view==='summary'&&old.view!=='summary')&&!(old.view==='summary'&&cv.view!=='summary'))cv.view=old.view;
+    if(cv.gview!=null&&!(cv.games&&cv.games[cv.gview]))cv.gview=null}
+  S=cv;G=S.game||null;
+}
+/* re-render caused by something other than a tap (sync, retry timers): never moves the scroll, and does nothing at all if the page would come out identical */
+let RBG=false;
+function bgRender(){
+  if(typeof window==='undefined'||(S&&S.view==='game'&&G)){render();return}
+  const y=window.scrollY,m=document.querySelector&&document.querySelector('.mbody'),my=m?m.scrollTop:0;
+  RBG=true;try{render()}finally{RBG=false}
+  try{const m2=document.querySelector('.mbody');if(m2&&my)m2.scrollTop=my;if(Math.abs((window.scrollY||0)-y)>1)window.scrollTo(0,y)}catch(e){}
+}
 function load(){try{const s=localStorage.getItem('saturday_sideline_v1');if(s){S=JSON.parse(s);G=S.game||null}}catch(e){S=null}}
 
 function newLeague(){
@@ -5017,15 +5042,15 @@ async function cloudInit(){
         if(!S){S=cv;G=S.game||null;try{localStorage.setItem('saturday_sideline_v1',JSON.stringify(S))}catch(e){}changed=true}
         else if(!sameCareer(cv,S)){if(JSON.stringify(cv.teams)!==JSON.stringify(S.teams)){SYNCQ=SYNCQ||{};SYNCQ.career=cv}}
         else{const pc=careerProg(cv),pl=careerProg(S);
-          if(pc>pl||(pc===pl&&(d.ts||0)>(S._ts||0))){bk('saturday_sideline_v1');S=cv;G=S.game||null;try{localStorage.setItem('saturday_sideline_v1',JSON.stringify(S))}catch(e){}changed=true;CLOUD.cts=d.ts||0}
+          if(pc>pl||(pc===pl&&(d.ts||0)>(S._ts||0))){bk('saturday_sideline_v1');adoptCareer(cv);try{localStorage.setItem('saturday_sideline_v1',JSON.stringify(S))}catch(e){}changed=true;CLOUD.cts=d.ts||0}
           else if(pl>pc){await cloudSnap('career_prev',d)}}
       }}catch(e){}}
     }
     if(S&&!SYNCQ)CLOUD.sprog=careerProg(S);
     if(S&&!S._cid){S._cid='L'+hashS((S.lname||'')+'|'+(S.coach||'')+'|'+(S.baseYear||''))}
-    if(SYNCQ){CLOUD.hold=true;CLOUD.ready=true;CLOUD.state='local';applyCareerGlobals();render();return}
+    if(SYNCQ){CLOUD.hold=true;CLOUD.ready=true;CLOUD.state='local';applyCareerGlobals();bgRender();return}
     CLOUD.ready=true;CLOUD.state='synced';
-    if(changed){BV.open=BV.open&&!!LS;applyCareerGlobals();render()}else refreshStatus();
+    if(changed){BV.open=BV.open&&!!LS;applyCareerGlobals();bgRender()}else refreshStatus();
     cloudPush();
   }catch(e){CLOUD.state='error';refreshStatus()}
 }
@@ -5047,27 +5072,29 @@ async function cloudPush(retry){
           if(cv&&cv.teams){
             const newer=sameCareer(cv,S)&&(careerProg(cv)>careerProg(S)||(CLOUD.sprog!=null&&careerProg(S)===CLOUD.sprog&&careerProg(cv)>=careerProg(S)));
             if(newer&&G&&S.view==='game'){pushing=false;CLOUD.state='error';refreshStatus();return}
-            if(newer){try{const o=localStorage.getItem('saturday_sideline_v1_backup');let keep=false;if(o){const a=JSON.parse(o);keep=sameCareer(a,S)&&careerProg(a)>careerProg(S)}if(!keep)localStorage.setItem('saturday_sideline_v1_backup',JSON.stringify(S))}catch(e){}S=cv;G=S.game||null;try{localStorage.setItem('saturday_sideline_v1',JSON.stringify(S))}catch(e){}CLOUD.cts=cd.ts||0;CLOUD.sprog=careerProg(S);pushing=false;CLOUD.state='synced';applyCareerGlobals();if(!SC.A&&!(typeof G!=='undefined'&&G&&S.view==='game'))render();refreshStatus();return}
-            if(!sameCareer(cv,S)){CLOUD.hold=true;SYNCQ={career:cv};pushing=false;CLOUD.state='local';render();return}
+            if(newer){try{const o=localStorage.getItem('saturday_sideline_v1_backup');let keep=false;if(o){const a=JSON.parse(o);keep=sameCareer(a,S)&&careerProg(a)>careerProg(S)}if(!keep)localStorage.setItem('saturday_sideline_v1_backup',JSON.stringify(S))}catch(e){}adoptCareer(cv);try{localStorage.setItem('saturday_sideline_v1',JSON.stringify(S))}catch(e){}CLOUD.cts=cd.ts||0;CLOUD.sprog=careerProg(S);pushing=false;CLOUD.state='synced';applyCareerGlobals();if(!SC.A&&!(typeof G!=='undefined'&&G&&S.view==='game'))bgRender();refreshStatus();return}
+            if(!sameCareer(cv,S)){CLOUD.hold=true;SYNCQ={career:cv};pushing=false;CLOUD.state='local';bgRender();return}
           }}
         if(!cd.none&&(cd.json||cd.parts)){let cv=null;try{cv=JSON.parse(await zunpack(await docJson('career',cd)))}catch(e){}if(cv&&(!sameCareer(cv,S)||careerProg(cv)>careerProg(S)))await cloudSnap('career_prev',cd)}
       }
       CLOUD.force=false;
-      const pk=await packSave();await writeSplit('career',pk,{ts:S._ts});CLOUD.errAt=0;CLOUD.cts=S._ts;CLOUD.sprog=careerProg(S);CLOUD.hadCareer=true;
-      const wk=(S.season||0)*20+(S.week||0);if(CLOUD.snapWk!==wk){CLOUD.snapWk=wk;await cloudSnap('snap'+(wk%10),{json:pk,ts:S._ts})}}
+      /* wts is the stamp of the copy being written. Taps during the write move S._ts on; remembering the newer stamp as "what the account has" made the next sync think another device had written, and it loaded the older copy back (the page flipped to where you were a moment ago). */
+      const wts=S._ts,wprog=careerProg(S),pk=await packSave();await writeSplit('career',pk,{ts:wts});CLOUD.errAt=0;CLOUD.cts=wts;CLOUD.sprog=wprog;CLOUD.hadCareer=true;
+      const wk=(S.season||0)*20+(S.week||0);if(CLOUD.snapWk!==wk){CLOUD.snapWk=wk;await cloudSnap('snap'+(wk%10),{json:pk,ts:wts})}}
     else if(!S&&CLOUD.hadCareer){try{const cur=await CLOUD.db.doc(base+'career').get();if(cur.exists&&!(cur.data()||{}).none)await cloudSnap('career_prev',cur.data())}catch(e){}const ts=Date.now();await CLOUD.db.doc(base+'career').set({none:true,ts});CLOUD.cts=ts;CLOUD.hadCareer=false}
     CLOUD.state='synced';
-  }catch(e){CLOUD.state='error';CLOUD.errAt=CLOUD.errAt||Date.now();setTimeout(()=>{pushing=false;cloudPush(true)},(retry?20000:4000)+Math.random()*2000);try{render()}catch(x){}}
+  }catch(e){CLOUD.state='error';CLOUD.errAt=CLOUD.errAt||Date.now();setTimeout(()=>{pushing=false;cloudPush(true)},(retry?20000:4000)+Math.random()*2000);try{bgRender()}catch(x){}}
   pushing=false;refreshStatus();
+  if(CLOUD.state==='synced'&&!CLOUD.hold&&((S&&(S._ts||0)!==CLOUD.cts)||(LS&&LS._edited&&(LS._ts||0)!==CLOUD.lts)))cloudQueue(); /* something was saved while this push was in flight */
 }
 let SYNCQ=null;
 async function loadSnaps(){
-  CLOUD.snaps=null;render();
-  if(!CLOUD.db){CLOUD.snaps=[];render();return}
+  CLOUD.snaps=null;bgRender();
+  if(!CLOUD.db){CLOUD.snaps=[];bgRender();return}
   const ids=['career_prev'].concat([0,1,2,3,4,5,6,7,8,9].map(i=>'snap'+i)),out=[];
   await Promise.all(ids.map(async id=>{try{const r=await CLOUD.db.doc('data/users/'+CLOUD.uid+'/'+id).get();if(r.exists){const d=r.data()||{};const c=JSON.parse(await zunpack(await docJson(id,d)));if(c&&c.teams&&sameCareer(c,S))out.push({id,c,ts:d.saved||d.ts||0,prog:careerProg(c)})}}catch(e){}}));
   out.sort((a,b)=>b.prog-a.prog||b.ts-a.ts);
-  CLOUD.snaps=out.filter((x,i,a)=>a.findIndex(y=>y.prog===x.prog)===i);render();
+  CLOUD.snaps=out.filter((x,i,a)=>a.findIndex(y=>y.prog===x.prog)===i);bgRender();
 }
 function snapModal(){
   if(!S||!CLOUD.snapOpen)return '';
@@ -5745,15 +5772,20 @@ function renderGame(){
 }
 function render(){
   const app=$('#app');
-  if(S&&S.view==='game'&&G){renderGame();return}
+  if(S&&S.view==='game'&&G){app._hv='game';renderGame();return}
   stopLoop();SC.cv=null;
-  if(BV.open){app.innerHTML=builderView()+syncModal();return}
-  if(!S||S.view==='setup')app.innerHTML=setupView();
-  else if(S.view==='summary')app.innerHTML=summaryView();
-  else if(S.view==='presser'&&S.presser)app.innerHTML=presserView();
-  else if((S.view==='selection'||S.selPending)&&S.post&&S.post.seeds&&S.post.seeds.length===12){if(S.selPending){S.selPending=false;S.sel={i:0};S.view='selection';save()}app.innerHTML=selectionView()}
-  else{S.view='hub';app.innerHTML=hubView()+(S.gview!=null?gameModal():'')+(S.clview!=null?classicModal():'')+histModal()+rivModal()+snapModal()}
-  if(SYNCQ)app.insertAdjacentHTML('beforeend',syncModal());
+  let H;
+  if(BV.open)H=builderView();
+  else if(!S||S.view==='setup')H=setupView();
+  else if(S.view==='summary')H=summaryView();
+  else if(S.view==='presser'&&S.presser)H=presserView();
+  else if((S.view==='selection'||S.selPending)&&S.post&&S.post.seeds&&S.post.seeds.length===12){if(S.selPending){S.selPending=false;S.sel={i:0};S.view='selection';save()}H=selectionView()}
+  else{S.view='hub';H=hubView()+(S.gview!=null?gameModal():'')+(S.clview!=null?classicModal():'')+histModal()+rivModal()+snapModal()}
+  if(SYNCQ)H+=syncModal();
+  if(RBG&&app._h===H&&app._hv==='page')return; /* background refresh with nothing new: leave the page (open panels, typed text, scroll) alone */
+  const keep={};try{document.querySelectorAll('[data-keep]').forEach(el=>{if(el.scrollLeft)keep[el.dataset.keep]=el.scrollLeft})}catch(e){}
+  app.innerHTML=H;app._h=H;app._hv='page';
+  try{document.querySelectorAll('[data-keep]').forEach(el=>{const x=keep[el.dataset.keep];if(x)el.scrollLeft=x;const on=el.querySelector('.on,[aria-selected="true"],[aria-pressed="true"]');if(on&&el.scrollWidth>el.clientWidth){const a=on.offsetLeft-el.offsetLeft,b=a+on.offsetWidth;if(a<el.scrollLeft+8)el.scrollLeft=Math.max(0,a-24);else if(b>el.scrollLeft+el.clientWidth-8)el.scrollLeft=b-el.clientWidth+24}})}catch(e){}
 }
 function afterCommit(){
   if(G&&!G.watch&&G.phase==='def'&&(S.defMode||'me')==='coord')coordDrive();
@@ -5901,7 +5933,7 @@ function act(a,d){
     case 'newjob':offseason();S.view='setup';window.scrollTo(0,0);break;
     case 'reset':if(!confirmReset){confirmReset=true}else{confirmReset=false;try{localStorage.removeItem('saturday_sideline_v1')}catch(e){}S=null;G=null;L=newLeague()}break;
   }
-  save();render();
+  if(NAVACT.has(a))saveNav();else save();render();
 }
 let tapAt=0;
 document.addEventListener('pointerdown',e=>{const b=e.target.closest&&e.target.closest('[data-act="tap"]');if(b&&G&&G.meter){e.preventDefault();tapAt=Date.now();act('tap',{})}});
