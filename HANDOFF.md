@@ -5,10 +5,10 @@ Read this first when continuing the project in a new chat. It covers where every
 ## Where things live
 
 - **The game (live):** claude.ai artifact https://claude.ai/artifact/MjH8uh9Q7zihqKJGq7rEPB, a single self-contained HTML file. Publish updates to that same URL; never create a new artifact. Published version 92 on 2026-11-11.
-- **The code:** a git repo (`sideline.bundle` is a full copy with every branch). Restore it with:
+- **The code:** GitHub repo https://github.com/DakotahSK/saturday-sideline (private). Every work branch is pushed there. In a new chat, attach the repo (add_repo DakotahSK/saturday-sideline with push access) and clone it:
   ```
-  git clone sideline.bundle sideline && cd sideline
-  git branch -a        # all work branches come along
+  git clone https://github.com/DakotahSK/saturday-sideline && cd saturday-sideline
+  git fetch origin '+refs/heads/*:refs/remotes/origin/*'   # all work branches
   ./build.sh           # builds dist/sideline.html (the artifact)
   ./test.sh            # runs the test harnesses
   ```
@@ -33,9 +33,11 @@ Shipped in version 92 (on `main`):
 - 12 new Figma logos: FBO, SCB, NWY, SDB, ELL, EBC, HAL, BLV, HOU, WBK, CAL, VIC. Known flaw: VIC has a white fill inside the bow on dark backgrounds; clean up the cutout.
 - Name changes: Berean coach Adam Riveiro, QB Ethan Allen; Jerome coach Tim Knutson, QB Max Levdanskiy. Permanent named Berean players via `team.named`: Clark Allison (RB), Everett Allison (WR), Ollie Forrester (LB). These are in the cloud save and the code.
 
+Merged into `main`, not yet published:
+- `gameday`: watch-mode UI (speeds, skips, drive tracker, tabbed dock), live fan chat (under 1% repeated lines), halftime show that recaps the league. Test: `tests/half_t.js`. Known leftovers: on desktop the dock sits below the fold; the halftime "By quarter" note has no quarter labels; week-1 cards say "(0-0) leads the division".
+
 In progress on branches (not shipped):
 - `anim-playbook`: 13 new offensive plays, 4 defensive calls, grouped play menus, QB pocket movement, OL/DL blocking pairs, smoother steering. Needs a visual check, tuning, and a merge with main.
-- `gameday`: watch-mode UI (speeds, skips, drive tracker, tabbed dock), live fan chat, halftime show that recaps the league. Needs a merge with main, screenshots and `tests/half_t.js`.
 - `stories`: only the `tests/story_t.js` inventory harness so far. Findings: about 109 stories a season but no multi-week arcs, QB controversies never resolve, midseason firings never happen. A design is in the branch's report: `S.arcs` with arc types (hot seat to firing, QB controversy resolution, unbeaten watch, Cinderella, revenge games from past playoff results, division races, coach feuds, record chases, portal sagas), using real league history. Not built.
 - `stadiums`: nothing built yet. Plan: a stadium identity per team derived from the team (architecture, capacity by prestige, scenery by region), domes by abbr (HOU, NWY, LHI, SYR, ESB, VIC, SKY) with a saved `t.dome` override, where `gameEnv` must remove weather for domes (including cached `g.env`), and more pregame camera shots seeded per game and cached in `SC`. Known existing bug: resuming a game mid-intro during the second exterior shot throws in `exCamShot` because `SC.ext` is undefined (black screen until skip).
 
@@ -43,4 +45,4 @@ Still to do after those: merge everything into main, run `./test.sh`, have a fre
 
 ## Starter prompt for a new chat
 
-> I'm continuing my Saturday Sideline game. I attached sideline.bundle and HANDOFF.md. Read HANDOFF.md, restore the repo from the bundle, then pick up the next unfinished item. My game is at https://claude.ai/artifact/MjH8uh9Q7zihqKJGq7rEPB.
+> I'm continuing my Saturday Sideline game. The code is in my GitHub repo DakotahSK/saturday-sideline. Attach it, read HANDOFF.md in the repo, then pick up the next unfinished item. My game is at https://claude.ai/artifact/MjH8uh9Q7zihqKJGq7rEPB.
