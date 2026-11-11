@@ -2620,12 +2620,8 @@ function dramaNews(w,add){
   for(const t of S.teams){if(t.id===S.userId)continue;const s=streak(t.id),r=rec(t.id),rk=p.indexOf(t.id)+1;
     // QB controversy
     if(!S.qbcW||S.qbcW.wk!==w)S.qbcW={wk:w,n:0};
-    if(!s.w&&s.n>=2&&s.n<=4&&t.star&&t.star.pos==='QB'&&S.qbcW.n<1&&!(S.qbc&&S.qbc[t.id]===S.season)&&rr()<.35&&(S.qbcW.n++,(S.qbc=S.qbc||{})[t.id]=S.season,true))add('Drama',23,t.id,'QB controversy brewing at '+t.name,'After '+s.n+' straight losses, '+short(t.star.name)+' split reps with the backup in practice. Coach '+t.coach.name+' won\'t name a starter.');
     // fans turning
-    if(w>=3&&rk>PN&&((S.preRank||p).indexOf(t.id)+1)<=8&&teamState(t.id).mood<25&&rr()<.5){const fp=teamFeed(t.id,3)[0];add('Drama',22,t.id,t.name+' fans have had enough',(fp?'"'+fp.txt+'" ':'')+'Preseason expectations were sky high. '+recStr(t.id)+' is not what anybody signed up for.')}
     // record chase
-    const R2=S.arch&&S.arch.rec&&S.arch.rec[t.id];if(R2&&t.star&&w>=5&&w<12){const kk=t.star.pos==='QB'?'pass':t.star.pos==='RB'?'rush':'rcv',rec2=R2[kk],y=t.star.yds||0;
-      if(rec2&&y<rec2[1]&&y>=rec2[1]*.82&&rr()<.6)add('Record watch',19,t.id,short(t.star.name)+' is closing in on a '+t.name+' record',short(t.star.name)+' has '+y.toLocaleString()+' yards. The program record is '+rec2[1].toLocaleString()+', set by '+rec2[0]+' in '+rec2[2]+'.')}
   }
   // first rivalry win in years
   for(const g of games){if(g.riv==null)continue;const rv=S.rivals[g.riv],W=winnerOf(g),Lo=W===g.h?g.a:g.h,prevW=[...(rv.arch||[]),...(rv.hist||[]).slice(0,-1)].filter(m=>m.w===W).map(m=>m.y);
@@ -2643,6 +2639,144 @@ function suspensions(w,fresh){
   for(const t of S.teams){if(t.id===S.userId||rr()>.012)continue;
     const pos=['WR','RB','CB','LB','DE'][Math.floor(rr()*5)],off=['WR','RB'].includes(pos),name=fullName();
     const j={team:t.id,pos,name,wk:1,side:off?'off':'def',imp:-2,susp:true};S.inj.push(j);fresh.push(j)}
+}
+
+/* ---------- multi-week story arcs: S.arcs={season,list:[{k,t,o,st,w0,n,x,done}],m:{}} ---------- */
+const ARCSTG={ccg:'conference title game',bowl:'bowl game',f:'national title game',sf:'semifinal',qf:'quarterfinal',r1:'first-round game'};
+function arcsOn(){if(!S.arcs||S.arcs.season!==S.season)S.arcs={season:S.season,list:[],m:{}};if(!S.arcs.m)S.arcs.m={};return S.arcs}
+function arcMod(id,side){const A=S.arcs;if(!A||!A.list.length||A.season!==S.season)return 0;let x=0;for(const a of A.list)if(a.x&&a.t===id&&(a.k!=='qb'||side==='off'))x+=a.x;return x}
+const arcHas=(k,t)=>{const A=S.arcs;return !!(A&&A.season===S.season&&A.list.some(a=>a.k===k&&a.t===t&&!a.done))};
+/* a hot seat that has simmered a week can end in a midseason firing, never more than three a year */
+function arcFires(w){
+  const A=arcsOn(),out=[];if(w<4||w>=11)return out;const rr=srng(hashS(S.season+':arcfire:'+w));
+  for(const a of A.list){if(a.k!=='seat'||a.done||a.st!==1||a.w0>=w)continue;const t=team(a.t),r=rec(a.t);
+    if(!t.coach||t.coach.interim||t.coach.heat<64||r.l<=r.w||(A.m.fired||0)>=3||rr()>=.4)continue;
+    const nm=fullName(),bounce=rr()<.5;A.m.fired=(A.m.fired||0)+1;A.m['o'+a.t]=t.coach.name+'|'+t.coach.yrs+'|'+r.w+'-'+r.l;
+    out.push({t:a.t,old:t.coach.name,nw:nm,r:r.w+'-'+r.l,arc:1});
+    t.coach={name:nm,heat:30,yrs:0,interim:true,rt:hireRt(t,true),d:0};
+    a.st=2;a.n=w;a.o=bounce?1:0;a.x=bounce?2.6:-.6}
+  return out}
+function arcsWeek(w,add){
+  const A=arcsOn(),p=poll(),N=id=>team(id).name,rr=srng(hashS(S.season+':arc:'+w)),pk=a=>a[Math.floor(rr()*a.length)],out=[],F=fill,user=S.userId,last=w>=11;
+  const say=(tag,sc,tm,title,body)=>out.push({tag,sc,tm,title,body});
+  const gm=(id,wk)=>S.games.find(g=>g.done&&g.wk===wk&&(g.h===id||g.a===id));
+  const rs=(id,g)=>{const h=g.h===id;return {won:winnerOf(g)===id,my:h?g.hs:g.as,th:h?g.as:g.hs,o:h?g.a:g.h}};
+  const rk=id=>{const i=p.indexOf(id);return i<0?99:i+1},ordn=n=>n+(n%10===1&&n!==11?'st':n%10===2&&n!==12?'nd':n%10===3&&n!==13?'rd':'th');
+  const act=k=>A.list.filter(a=>a.k===k&&!a.done),has=(k,t)=>A.list.some(a=>a.k===k&&a.t===t),cnt=k=>A.list.filter(a=>a.k===k).length;
+  const start=(k,t,o,x)=>{const a={k,t,o:o==null?0:o,st:0,w0:w,n:0,x:x||0,done:0};A.list.push(a);return a};
+  const wx=g=>{if(!g)return '';const e=gameEnv(g);return e.weather==='rain'?' Rain is in the forecast, so expect a slick ball.':e.weather==='snow'?' Snow is in the forecast and the field will be a mess.':e.weather==='wind'?' A stiff wind is expected, and it will decide a punt or two.':e.night?' It is a night game, and the student section will be loud.':''};
+  const nxt=id=>{const g=nextGameOf(id);return g?N(g.h===id?g.a:g.h):null};
+  const pre=id=>(S.preRank||[]).indexOf(id)+1;
+  const lastYr=t=>{const q=(t.past||[])[(t.past||[]).length-1];return q&&q.s===S.season-1?q:null};
+  // ---- hot seat
+  for(const a of act('seat')){const t=team(a.t),c=t.coach,s=streak(a.t),o=(A.m['o'+a.t]||'').split('|'),v={t:t.name,c:c.name,r:recStr(a.t),old:o[0],y:o[1],r0:o[2],n:s.n,opp:nxt(a.t)||'the next one'};
+    if(a.st<2&&s.w&&s.n>=2&&w>a.w0){a.done=2;c.heat=Math.max(45,c.heat-12);
+      say('Hot seat',46,a.t,F(pk(['{c} lives to fight another week','{t} wins again and the seat cools','{c} buys himself time at {t}']),v),F(pk(['{t} has won {n} straight and the talk about a change has gone quiet. {c} is {r}.','The boosters who were drafting statements last week are sending congratulations. {t} is {r} after {n} straight wins.','Two wins did not fix everything at {t}, but they did get {c} out of the headlines. {r} on the year.']),v));continue}
+    if(a.st===0&&w>a.w0){a.st=1;say('Hot seat',52,a.t,F(pk(['{t} brass backs {c}. For now.','Vote of confidence for {c}, the kind nobody wants','"Full confidence" at {t} has a clock on it','{c} gets public support from the {t} athletic director']),v),
+      F(pk(['The statement came after the {r} start. Coaches usually hear that line a few weeks before they stop hearing anything.','Next up is {opp}. Lose that one and the statement will not age well.','Boosters are not buying it. Neither is the message board, which has already hired three replacements.']),v)+(rr()<.5?' '+F(pk(['Athletic directors say "full confidence" right up until they do not.','{c} said he is focused on {opp}. That is what they all say.']),v):''))}
+    else if(a.st===1&&last){a.done=3;say('Hot seat',40,a.t,F(pk(['{c} survives the regular season at {t}','The verdict on {c} waits for December']),v),F('{t} finished {r}. Whether that is enough for {c} will be settled by the people who sign the checks, and they are not talking.',v))}
+    else if(a.st===2){const k=[],g0=a.n;let wk=0,lk=0;for(const g of S.games)if(g.done&&g.wk>g0&&(g.h===a.t||g.a===a.t))(winnerOf(g)===a.t?wk++:lk++);v.wk=wk;v.lk=lk;
+      if(w===a.n)say('Coaching',66,a.t,F(pk(['{t} fires {old}','{old} is out at {t}','{t} pulls the plug on {old}','Change at {t}: {old} is fired at {r0}']),v),F(pk(['{old} was in year {y} and had the team at {r0}. {c} takes over as interim coach.','The end came after a {r0} start. {c} runs the team the rest of the way as the interim.','{old} had been on the seat for a month. {t} moved first, and {c} gets the keys on an interim basis.']),v));
+      else if(w===a.n+1){const g=gm(a.t,w);if(g){const q=rs(a.t,g);v.sc=q.my+'-'+q.th;v.opp=N(q.o);say('Coaching',q.won?50:42,a.t,F(q.won?pk(['{c} wins his debut at {t}','Interim {c} is 1-0','New voice, same result? Not at {t}: {sc} over {opp}']):pk(['{c} loses his debut, {sc}','{t} falls to {opp} under the interim','No bounce yet at {t}']),v),F(q.won?pk(['{t} beat {opp} {sc} with {c} on the headset. Players called the change a reset.','The first game without {old} went the right way, {sc} over {opp}. Nobody is booking a parade yet.']):pk(['{t} dropped a {sc} decision to {opp}. {c} said the effort was there. The scoreboard said otherwise.','A week after {old} was shown the door, {t} lost {sc} to {opp}.']),v))}}
+      else if(w>=a.n+3||last){const kk=wk+lk;a.x=0;if(kk>=2&&wk>=Math.ceil(kk*.67)){a.done=1;c.interim=false;c.rt=Math.max(c.rt||0,62);c.heat=25;say('Coaching',58,a.t,F(pk(['{c} gets the job at {t}','Interim no more: {t} makes {c} the head coach','The tag comes off: {c} stays at {t}']),v),F(pk(['{t} is {wk}-{lk} since the change, after starting {r0}. The athletic director said the players answered the call.','{old} left at {r0}. {c} has gone {wk}-{lk} since and the interim label is gone.']),v))}
+        else{a.done=2;say('Coaching',48,a.t,F(pk(['No bounce at {t}: {wk}-{lk} since the firing','{t} sinks further under interim {c}','Firing {old} did not fix {t}']),v),F(pk(['{old} was fired at {r0}. {t} is {wk}-{lk} since. Somebody is going to have to explain the plan.','{c} inherited a {r0} team and a {wk}-{lk} stretch has not changed the mood. The real search starts in December.']),v))}}}}
+  for(const t of S.teams){const id=t.id;if(id===user||!t.coach||t.coach.interim||has('seat',id)||w<3||w>9||out.filter(x=>x.k==='seat').length||(cnt('seat')>=5))continue;const r=rec(id);
+    if(t.coach.heat>=56&&r.l>=3&&r.l>r.w-1&&rr()<.7){const a=start('seat',id,0,0),ly=lastYr(t),v={t:t.name,c:t.coach.name,r:recStr(id),l:r.l,w:r.w,g:r.w+r.l,y:t.coach.yrs+1,pw:ly&&ly.w,pl:ly&&ly.l};
+      const h1=pk(['{t} is {r} and has dropped {l} of {g}.','{r} is not what {t} paid for. That is {l} losses in {g} games.','{t} is {r}, and nobody in the building is calling it a rebuilding year.']),
+        h2=ly&&ly.w>=7?F('The {pw}-{pl} finish last fall bought {c} some patience. It is gone.',v):t.prestige>=75?F('At a school with this much history, {r} does not fly.',v):F(pk(['{c} is in year {y} and has not handed the fan base a winning season to point to.','The money guys at {t} have started asking what the plan is.']),v);
+      say('Hot seat',54,id,F(pk(['{c} is running out of rope at {t}','The {t} job is getting hot','Hot seat watch: {c} and {t}','{t} is {r}, and the boosters are counting']),v),F(h1,v)+' '+h2);out[out.length-1].k='seat'}}
+  // ---- QB controversy: ends with the starter keeping the job or the backup taking it
+  for(const a of A.list.filter(a=>a.k==='qb')){const t=team(a.t),q=(A.m['q'+a.t]||'A|B').split('|'),v={t:t.name,sn:q[0],bk:q[1],r:recStr(a.t),c:t.coach.name};
+    if(!a.done&&w>=a.w0+2){let wk=0,lk=0;for(const g of S.games)if(g.done&&g.wk>a.w0&&(g.h===a.t||g.a===a.t))(winnerOf(g)===a.t?wk++:lk++);
+      if(wk>=1&&wk>=lk){a.done=1;a.o=0;a.x=.4;say('Drama',50,a.t,F(pk(['{sn} keeps the job at {t}','{c} sticks with {sn}, and it works','The {sn} question gets a quiet answer']),v),F(pk(['{t} is {r}. {c} stayed with {sn} through the noise and the wins came back.','Nobody is chanting for {bk} now. {sn} kept the job and {t} is {wk}-{lk} since the controversy started.']),v))}
+      else if(lk>=2||w>=a.w0+3){a.done=1;a.o=1;a.x=rr()<.55?1.2:-1;say('Drama',58,a.t,F(pk(['{bk} is the starter at {t}','{t} makes the switch: {bk} replaces {sn}','Benched: {sn} loses the {t} job']),v),F(pk(['{c} pulled the trigger after {lk} straight losses. {bk} takes the first snap Saturday. {sn} will not say what he thinks.','The competition lasted exactly as long as the losing did. {bk} is QB1 at {t}, and {sn} is a very expensive backup.']),v))}}
+    else if(a.done&&a.o===1&&!a.n&&w>=a.w0+5&&w<=11){a.n=1;say('Drama',42,a.t,F(pk(['{sn} is looking at the portal','Benched {sn} is shopping for a new home']),v),F('{sn} lost the {t} job in Week '+(a.w0+3)+'. People close to him say he is lining up calls, and {c} will not be asked to talk him out of it.',v))}}
+  if(w>=2&&w<=8&&cnt('qb')<4&&!out.some(x=>x.k==='qb'))for(const t of S.teams){const id=t.id,s=streak(id);if(id===user||has('qb',id)||A.list.some(a=>a.k==='qb'&&a.t===id)||s.w||s.n<2||s.n>4||rr()>.3)continue;
+    const sn=t.star&&t.star.pos==='QB'?short(t.star.name):short(pk(FIRST)+' '+pk(LAST)),bk=short(pk(FIRST)+' '+pk(LAST));A.m['q'+id]=sn+'|'+bk;start('qb',id,0,0);
+    const v={t:t.name,sn,bk,n:s.n,r:recStr(id)};say('Drama',53,id,F(pk(['QB controversy brewing at {t}','{t} fans want {bk} at quarterback','Is {sn} still the guy at {t}?','The {t} quarterback room is not quiet']),v),F(pk(['After {n} straight losses, {sn} split reps with {bk} this week and the coach would not say who starts Saturday.','{sn} has led {t} into a {r} hole. The fan base wants {bk}, and the chants are getting louder.','{t} has lost {n} in a row and the quarterback is the easy name to blame. {bk} took first-team reps in practice.']),v));out[out.length-1].k='qb';break}
+  // ---- unbeaten watch
+  for(const a of act('unb')){const t=team(a.t),r=rec(a.t),v={t:t.name,n:r.w,k:rk(a.t),opp:nxt(a.t)};
+    if(r.l>0){const lg=S.games.filter(g=>g.done&&(g.h===a.t||g.a===a.t)&&winnerOf(g)!==a.t).sort((x,y)=>x.wk-y.wk)[0],q=lg?rs(a.t,lg):null;a.done=2;v.n=a.o;v.sc=q?q.th+'-'+q.my:'';v.by=q?N(q.o):'a rival';
+      say('Unbeaten watch',w===lg.wk?56:30,a.t,F(pk(['The perfect run ends: {by} beats {t}, {sc}','{t} loses at {n}-0','Undefeated no more: {by} {sc}']),v),F(pk(['{t} won its first {n} games and carried the unbeaten tag into the poll every week. {by} took it away, {sc}.','It lasted {n} games. {by} beat {t} {sc} and the perfect season is gone.']),v));continue}
+    a.o=r.w;if(last){a.done=1;say('Unbeaten watch',54,a.t,F(pk(['{t} finishes the regular season unbeaten','{r} and untouched: {t}']),Object.assign(v,{r:r.w+'-0'})),F('{t} went {n}-0 and sits at No. {k} in the poll. The only thing left is the part that matters.',v));continue}
+    if(r.w>=a.n+2&&r.w>=6){a.n=r.w;say('Unbeaten watch',48,a.t,F(pk(['{t} is {n}-0 and the schedule is running out of traps','Still perfect: {t} at {n}-0','{n}-0 and counting for {t}']),v),F(pk(['No. {k} {t} has not lost yet.{o2} Every opponent from here on is playing for a headline.','{t} is {n}-0 and everyone it faces now gets a bonus for beating the unbeaten.']),Object.assign(v,{o2:v.opp?' Next up is '+v.opp+'.':''})))}}
+  if(w>=3&&w<11&&cnt('unb')<6)for(const id of p.slice(0,16)){const r=rec(id);if(id===user||r.l||r.w<4||has('unb',id)||A.list.some(a=>a.k==='unb'&&a.t===id)||act('unb').length>=3)continue;const a=start('unb',id,r.w,0);a.n=r.w;
+    const v={t:N(id),n:r.w,k:rk(id)};say('Unbeaten watch',50,id,F(pk(['{t} is {n}-0 and the country is paying attention','Unbeaten {t} lands on the radar','Nobody has laid a glove on {t} yet']),v),F(pk(['No. {k} {t} is {n}-0. The question now is how long a team can go without anybody finding the flaw.','{n} games, {n} wins. {t} has not been tested like this before, and the schedule is about to get honest.']),v));out[out.length-1].k='unb';break}
+  // ---- Cinderella
+  for(const a of act('cind')){const t=team(a.t),r=rec(a.t),v={t:t.name,r:recStr(a.t),k:rk(a.t),pr:pre(a.t)},g=gm(a.t,w),q=g?rs(a.t,g):null;
+    if(r.l>=2){a.done=2;a.x=0;say('Streak',44,a.t,F(pk(['Midnight for {t}: a second loss ends the run','The slipper falls off at {t}']),v),F('{t} was picked No. {pr} in the preseason poll and made it to {r} before the second loss. Nobody in the league is calling it a bad year.',v));continue}
+    if(last){a.done=1;a.x=0;say('Streak',52,a.t,F(pk(['{t} wraps the regular season at {r}','Cinderella lives: {t} finishes {r}']),v),F('The preseason poll had {t} at No. {pr}. It is No. {k} now, and the playoff committee has to say something about that.',v));continue}
+    if(q&&q.won&&rk(q.o)<=PN){v.opp=N(q.o);v.ro=rk(q.o);v.sc=q.my+'-'+q.th;say('Streak',49,a.t,F(pk(['{t} beats No. {ro} {opp}. Is this real?','{t} keeps winning, and now it is beating ranked teams']),v),F('{t} was No. {pr} in the preseason and is {r} after a {sc} win over No. {ro} {opp}. The poll has stopped treating this as a fluke.',v))}}
+  if(w>=3&&w<=9&&cnt('cind')<3&&!out.some(x=>x.k==='cind'))for(const t of S.teams){const id=t.id,r=rec(id);if(id===user||has('cind',id)||A.list.some(a=>a.k==='cind'&&a.t===id)||pre(id)<20||r.w<4||r.l>1||rk(id)>22)continue;start('cind',id,0,.5);
+    const v={t:t.name,r:recStr(id),k:rk(id),pr:pre(id)};say('Streak',51,id,F(pk(['Cinderella alert: {t} is {r}','Nobody had {t} on the list, and here it is at No. {k}','{t} crashed the poll and is not leaving']),v),F(pk(['The preseason poll had {t} at No. {pr}. Now it is {r} and ranked No. {k}, and some fans are scared to look at the schedule.','This was supposed to be a rebuilding year. {t} is {r} and has stopped apologizing.']),v));out[out.length-1].k='cind';break}
+  // ---- preseason favorite in free fall
+  for(const a of act('fall')){const t=team(a.t),s=streak(a.t),v={t:t.name,r:recStr(a.t),pr:pre(a.t),c:t.coach.name};
+    if(s.w&&s.n>=2){a.done=1;say('Drama',46,a.t,F(pk(['{t} stops the bleeding','The season is not lost at {t}, after all']),v),F('A preseason No. {pr} team, {t} has won {s} straight and climbed back to {r}. The doubters have gone quiet, but the damage in the standings is done.',Object.assign(v,{s:s.n})));continue}
+    if(last){a.done=2;say('Drama',44,a.t,F(pk(['A lost year at {t}: {r} after a No. {pr} start','{t} finishes {r}, a long way from No. {pr}']),v),F('Nobody expected this when the preseason poll came out. {t} will spend the winter explaining {r}.',v));continue}
+    if(a.st===0&&w>a.w0){a.st=1;a.x=rr()<.5?.8:0;say('Drama',47,a.t,F(pk(['Players-only meeting at {t}','{t} locks the doors and talks it out']),v),F(pk(['{t} is {r}. The captains called the meeting, {c} stayed out of the room, and the locker room was loud enough that people in the hall heard it.','After a No. {pr} start to the year and a {r} record, the leaders on the team decided the coaches were not the only ones who needed to speak up.']),v))}}
+  if(w>=3&&w<=9&&cnt('fall')<3&&!out.some(x=>x.k==='fall'))for(const t of S.teams){const id=t.id,r=rec(id);if(id===user||has('fall',id)||A.list.some(a=>a.k==='fall'&&a.t===id)||pre(id)<1||pre(id)>12||r.l<3||r.l<r.w)continue;start('fall',id,0,0);t.coach.heat=Math.min(100,t.coach.heat+6);
+    const champ=S.champHist&&S.champHist[0]&&S.champHist[0].natl===id,v={t:t.name,r:recStr(id),pr:pre(id),l:r.l};say('Drama',55,id,F(champ?pk(['The defending champions are {r}','Hangover: {t} is {r} a year after the title']):pk(['{t} was No. {pr} in August. Look at it now','Free fall: {t} is {r}','Preseason No. {pr} {t} has lost {l}']),v),F(champ?'{t} won it all last season. This season it is {r} and the trophy case looks like a museum exhibit about a different team.':pk(['Voters had {t} at No. {pr} in the preseason. After {l} losses, it is not close to the poll.','{t} was supposed to be a contender and is {r} instead. Fans have gone from planning trips to planning to complain.']),v));out[out.length-1].k='fall';break}
+  // ---- revenge game
+  const slight=(A0,B0,g)=>{const t=team(A0),ly=lastYr(t);if(ly)for(const x of ly.pg||[])if(x[2]===B0&&x[3]<x[4])return {x:'On '+(S.season-1===S.season-1?'last year\'s bracket':''),txt:'Last year, '+N(B0)+' beat '+N(A0)+' '+x[4]+'-'+x[3]+' in the '+(ARCSTG[x[0]]||'postseason')+'.'};
+    const rv=g&&g.riv!=null?S.rivals[g.riv]:null,m=rv&&(rv.hist||[]).slice(-1)[0];if(m&&m.w===B0){const sc=(m.s||'0-0').split('-').map(Number);if(sc[0]-sc[1]>=14)return {txt:'The last time these two met, '+N(B0)+' won '+m.s+' in '+m.y+'. The '+troN(rv)+' is on the line.'}}return null};
+  for(const a of act('rev')){const g=S.games[a.n];if(!g||!g.done)continue;const q=rs(a.t,g),v={a:N(a.t),b:N(a.o),sc:Math.max(q.my,q.th)+'-'+Math.min(q.my,q.th),st:''};a.done=1;const sl=slight(a.t,a.o,g);v.st=sl?sl.txt:'';
+    say('Rivalry',q.won?50:44,q.won?a.t:a.o,F(q.won?pk(['{a} gets its revenge, {sc}','Payback: {a} beats {b}','{a} settles up with {b}']):pk(['{b} does it again to {a}, {sc}','No revenge for {a}: {b} wins {sc}']),v),F(q.won?pk(['{a} had this one circled. {st} It won {sc} and the locker room was loud.','Call it even. {st} {a} won {sc}.']):pk(['{a} talked about it all week. {st} {b} won {sc} anyway.','{st} The rematch went the same way, {sc}, and the chip on {a}\'s shoulder just got bigger.']),v))}
+  if(w<10&&cnt('rev')<4&&!out.some(x=>x.k==='rev'))for(const g of S.games){if(g.wk!==w+1||g.done||g.h===user||g.a===user)continue;let hit=null;for(const [A0,B0] of [[g.h,g.a],[g.a,g.h]]){const sl=slight(A0,B0,g);if(sl){hit={A0,B0,sl};break}}
+    if(!hit||has('rev',hit.A0))continue;const a=start('rev',hit.A0,hit.B0,0);a.n=S.games.indexOf(g);const v={a:N(hit.A0),b:N(hit.B0),st:hit.sl.txt};
+    say('Rivalry',51,hit.A0,F(pk(['Revenge game: {a} gets {b}','{a} has {b} circled','Payback week for {a}']),v),F('{st} '+pk(['The schedule makers did {a} a favor. Nobody on the roster needs a speech.','A year later, {a} still brings it up. This week it gets a chance to do something about it.','Coaches say they do not hold grudges. Their players disagree.'])+wx(g),v));out[out.length-1].k='rev';break}
+  // ---- division race, last weeks
+  if(w>=7){const grp={};for(const t of S.teams)(grp[t.conf*10+(t.div==null?9:t.div)]=grp[t.conf*10+(t.div==null?9:t.div)]||[]).push(t.id);const cand=[];
+    for(const gk in grp){const ids=confOrder(grp[gk].slice(),p);if(ids.length<2)continue;const L=ids[0],C=ids[1],rL=rec(L),rC=rec(C),gap=(rL.cw-rL.cl)-(rC.cw-rC.cl),h2h=S.games.find(g=>!g.done&&g.conf&&((g.h===L&&g.a===C)||(g.h===C&&g.a===L)));
+      const remL=S.games.filter(g=>!g.done&&g.conf&&g.wk<12&&(g.h===L||g.a===L)).length,remC=S.games.filter(g=>!g.done&&g.conf&&g.wk<12&&(g.h===C||g.a===C)).length;
+      if(gap<=2&&(remL||remC))cand.push({gk:+gk,L,C,rL,rC,gap,h2h,remL,remC,pri:(h2h?0:2)+gap+(L===user||C===user?-4:0)})}
+    cand.sort((a,b)=>a.pri-b.pri);let nd=0;
+    for(const c of cand){if(nd>=2||last||w>10)break;const t0=team(c.L),nm=t0.div!=null&&DIVS&&DIVS[t0.conf]?DIVS[t0.conf][t0.div]+' division':CONFS[t0.conf]+' race',v={l:N(c.L),c:N(c.C),lr:c.rL.cw+'-'+c.rL.cl,cr:c.rC.cw+'-'+c.rC.cl,nm,rl:c.remL,rc:c.remC,gb:fmtLine(c.gap/2)};
+      if(!A.list.some(a=>a.k==='div'&&a.t===c.gk))start('div',c.gk,0,0);const a=A.list.find(a=>a.k==='div'&&a.t===c.gk);a.o=c.L;if(a.n===w)continue;a.n=w;nd++;
+      let body;if(c.h2h){v.wkk=c.h2h.wk+1;v.hm=N(c.h2h.h);body=F(c.gap>0?'{l} ({lr}) leads {c} ({cr}) in the {nm}. They meet in Week {wkk} at {hm}. If {l} wins, it takes control with the tiebreaker in hand. If {c} wins, the two are level and {c} owns the head-to-head.':'{l} and {c} are tied at {lr} in the {nm}, and they play each other in Week {wkk} at {hm}. The winner takes the lead and the tiebreaker. The loser needs help.',v)+(c.h2h.wk===w+1?wx(c.h2h):'')}
+      else body=F(c.gap>0?'{l} ({lr}) leads {c} ({cr}) by {gb} in the {nm}. {l} has {rl} conference games left and {c} has {rc}. The two do not meet again, so {c} needs {l} to slip.':'{l} and {c} are level at {lr} in the {nm} and do not play each other again. {l} has {rl} to go, {c} has {rc}, and the first team to lose probably hands the other the title game.',v);
+      say('Playoff',c.h2h&&c.h2h.wk===w+1?57:47,c.L,F(pk(['{l} and {c} are down to it in the {nm}','Division watch: {l} leads {c}','{nm} comes down to {l} and {c}']),v),body);out[out.length-1].k='div'}
+  }
+  if(last)for(const a of act('div')){const g0=S.teams.filter(t=>t.conf*10+(t.div==null?9:t.div)===a.t).map(t=>t.id),ids=confOrder(g0.slice(),p),L=ids[0],C=ids[1],v={l:N(L),c:C!=null?N(C):'',lr:rec(L).cw+'-'+rec(L).cl,cr:C!=null?rec(C).cw+'-'+rec(C).cl:''};a.done=1;a.o=L;
+    say('Playoff',50,L,F(pk(['{l} wins the division, {lr} in conference','{l} holds off {c} and clinches the division']),v),F('{l} finished {lr} in league play to {c}\'s {cr} and heads to Championship Week. The race that looked tight in October ended the way the schedule said it would.',v))}
+  // ---- coach feud before a rivalry game
+  for(const a of act('feud')){const g=S.games[a.n];if(!g)continue;const rv=S.rivals[g.riv];if(!rv){a.done=2;continue}const ca=team(a.t).coach.name,cb=team(a.o).coach.name;
+    if(g.done){const W=winnerOf(g),Lw=W===g.h?g.a:g.h,v={tw:N(W),tl:N(Lw),cw:team(W).coach.name,cl:team(Lw).coach.name,sc:Math.max(g.hs,g.as)+'-'+Math.min(g.hs,g.as),tr:troN(rv)};a.done=1;
+      if(team(W).coach)team(W).coach.heat=Math.max(0,team(W).coach.heat-4);if(team(Lw).coach)team(Lw).coach.heat=Math.min(100,team(Lw).coach.heat+4);
+      say('Rivalry',55,W,F(pk(['{cw} gets the last word on {cl}','{tw} wins the {tr}, and {cw} makes sure everyone knows','The feud ends: {tw} {sc}']),v),F(pk(['{tw} beat {tl} {sc}. After a week of trading shots, {cw} did his talking on the field. {cl} will hear about it all winter.','All week it was {cw} against {cl}. Saturday it was {tw}, {sc}.']),v))}
+    else if(w===a.w0+1){const v={ca,cb,tr:troN(rv),h:N(g.h)};say('Rivalry',49,g.h,F(pk(['{ca} and {cb} are done being polite','Feud week: {ca} vs. {cb}']),v),F(pk(['The {tr} game is Saturday and the coaches have stopped pretending. {ca} and {cb} have each found a reason to be offended.','Both fan bases have picked a side. Both coaches say it is about the players, which nobody believes.'])+wx(g),v))}}
+  if(w<10&&cnt('feud')<3&&!out.some(x=>x.k==='feud'))for(const g of S.games){if(g.wk!==w+2||g.wk>=12||g.riv==null||g.h===user||g.a===user||has('feud',g.h)||!S.rivals[g.riv])continue;const rv=S.rivals[g.riv],ca=team(g.h).coach.name,cb=team(g.a).coach.name;
+    const a=start('feud',g.h,g.a,0);a.n=S.games.indexOf(g);const v={ca,cb,tr:troN(rv),h:N(g.h),ar:N(g.a),ser:N(g.h)+' '+seriesTxt(rv,g.h).toLowerCase()};
+    say('Rivalry',50,g.h,F(pk(['{ca} and {cb} are not friends','War of words before the {tr} game','{ca} vs. {cb}: this one got personal']),v),F(pk(['{ca} was asked about {cb} and answered for four minutes. {cb} said the {tr} is won on the field, which is what you say when you are angry. Series: {ser}.','The coaches have traded jabs for a week. {ser}, and nobody is giving ground.','{ca} and {cb} have a history, and this week it came out in public. The game is in two weeks. {ser}.']),v));out[out.length-1].k='feud';break}
+  // ---- program record chase
+  for(const a of act('chase')){const t=team(a.t),R2=S.arch&&S.arch.rec&&S.arch.rec[a.t],kk=['pass','rush','rcv'][a.o],rec2=R2&&R2[kk];if(!rec2||!t.star){a.done=2;continue}const y=t.star.yds||0,v={p:short(t.star.name),t:t.name,y:y.toLocaleString(),ry:rec2[1].toLocaleString(),who:rec2[0],yr:rec2[2],left:(rec2[1]-y).toLocaleString(),g:Math.max(1,11-w)};
+    if(y>=rec2[1]){a.done=1;say('Record watch',57,a.t,F(pk(['{p} breaks the {t} record','New name on top: {p} passes {who}','{p} makes {t} history']),v),F(pk(['{p} now has {y} yards, past the {ry} that {who} put up in {yr}. It had stood a long time.','The mark {who} set in {yr} is gone. {p} is at {y} yards and still has games to play.']),v))}
+    else if(last){a.done=2;say('Record watch',40,a.t,F(pk(['{p} falls short of the {t} record','So close: {p} ends {left} yards shy']),v),F('{p} finished with {y} yards. The record is {ry}, still held by {who} from {yr}. {left} yards, and no games left to find them.',v))}
+    else if(w>a.w0&&(w-a.w0)%2===0)say('Record watch',38,a.t,F(pk(['{p} needs {left} yards to catch {who}','The record is {left} yards away for {p}']),v),F('{p} has {y} yards and {g} games to go. {who} set the {t} record at {ry} in {yr}.',v))}
+  if(w>=5&&w<11&&cnt('chase')<3&&!out.some(x=>x.k==='chase'))for(const t of S.teams){const R2=S.arch&&S.arch.rec&&S.arch.rec[t.id];if(t.id===user||!R2||!t.star||has('chase',t.id)||A.list.some(a=>a.k==='chase'&&a.t===t.id))continue;
+    const o=t.star.pos==='QB'?0:t.star.pos==='RB'?1:2,rec2=R2[['pass','rush','rcv'][o]],y=t.star.yds||0;if(!rec2||y>=rec2[1]||y<rec2[1]*.82)continue;start('chase',t.id,o,0);
+    const v={p:short(t.star.name),t:t.name,y:y.toLocaleString(),ry:rec2[1].toLocaleString(),who:rec2[0],yr:rec2[2]};say('Record watch',49,t.id,F(pk(['{p} is closing in on a {t} record','{p} has {who}\'s name in the rearview','History watch at {t}: {p}']),v),F('{p} has {y} yards. The program record is {ry}, set by {who} in {yr}. It is a race against the calendar now.',v));out[out.length-1].k='chase';break}
+  out.sort((a,b)=>b.sc-a.sc);for(const x of out.slice(0,5))add(x.tag,x.sc+8,x.tm,x.title,x.body,1);
+}
+/* compact Storylines card for League > News */
+function arcLine(a){
+  const t=a.k==='div'?null:team(a.t),N=id=>team(id).name,rk=id=>{const i=poll().indexOf(id);return i<0?'':' (No. '+(i+1)+')'};
+  if(a.k==='seat'){const c=t.coach;return ['Hot seat',a.st===2&&!a.done?'Interim '+c.name+' at '+t.name:c.name+' at '+t.name,a.done===1?'Interim named head coach':a.done===2&&a.st===2?'Firing did not help':a.done===2?'Survived the scare':a.done?'Survived the regular season':a.st===2?'Interim, '+recStr(a.t)+' overall':a.st===1?recStr(a.t)+', boosters circling':recStr(a.t)+', seat is warm']}
+  if(a.k==='qb'){const q=(S.arcs.m['q'+a.t]||'A|B').split('|');return ['QB battle',t.name+': '+q[0]+' vs. '+q[1],a.done?(a.o?q[1]+' took over':q[0]+' kept the job'):'Starter undecided']}
+  if(a.k==='unb')return ['Unbeaten',t.name+rk(a.t),a.done?'Perfect run '+(a.done===1?'survived the regular season':'ended at '+a.o+'-0'):recStr(a.t)+' and counting'];
+  if(a.k==='cind')return ['Cinderella',t.name+rk(a.t),a.done?(a.done===1?'Made it through, '+recStr(a.t):'The run ended'):recStr(a.t)+', picked No. '+((S.preRank||[]).indexOf(a.t)+1)+' in August'];
+  if(a.k==='fall')return ['Free fall',t.name,a.done?(a.done===1?'Stabilized at '+recStr(a.t):'Lost season, '+recStr(a.t)):recStr(a.t)+', preseason No. '+((S.preRank||[]).indexOf(a.t)+1)];
+  if(a.k==='rev')return ['Revenge',N(a.t)+' vs. '+N(a.o),a.done?'Played, see News':'Week '+(S.games[a.n].wk+1)];
+  if(a.k==='div'){const L=team(a.o);return ['Division',(L?L.name:'Race')+(L&&L.div!=null&&DIVS&&DIVS[L.conf]?', '+DIVS[L.conf][L.div]:''),a.done?'Clinched':'Down to the wire']}
+  if(a.k==='feud')return ['Feud',team(a.t).coach.name+' vs. '+team(a.o).coach.name,a.done?'Settled on the field':'Week '+(S.games[a.n].wk+1)];
+  if(a.k==='chase'){const R2=S.arch&&S.arch.rec&&S.arch.rec[a.t],r=R2&&R2[['pass','rush','rcv'][a.o]];return ['Record chase',short(t.star.name)+', '+t.name,a.done?(a.done===1?'Record broken':'Fell short'):r?(t.star.yds||0).toLocaleString()+' of '+r[1].toLocaleString()+' yards':'']}
+  return ['Story','',''];
+}
+function arcCard(){
+  const A=S.arcs;if(!A||A.season!==S.season||!A.list.length)return '';
+  const live=A.list.filter(a=>!a.done),dn=A.list.filter(a=>a.done).slice(-3).reverse();let h='';
+  const row=(a,old)=>{try{const l=arcLine(a);return '<div class="st-row'+(old?' st-old':'')+'"><span class="st-k">'+esc(l[0])+'</span><span class="st-t">'+esc(l[1])+'</span><span class="st-s">'+esc(l[2])+'</span></div>'}catch(e){return ''}};
+  h+=live.slice(0,7).map(a=>row(a,0)).join('')+dn.map(a=>row(a,1)).join('');
+  return h?'<section class="card st-card"><span class="eyebrow">Storylines</span>'+h+'</section>':'';
 }
 
 /* ---------- team logos: shape, colors and a mascot emblem, unique per team ---------- */
@@ -3081,8 +3215,8 @@ function updatePower(w){
     pr.o=Math.round(pr.o*100)/100;pr.d=Math.round(pr.d*100)/100;
   }
 }
-function rOff(id){return team(id).off+bonus(id).off+injMod(id).off+idMod(id).off+staffMod(id).off+coachMod(id)}
-function rDef(id){return team(id).def+bonus(id).def+injMod(id).def+idMod(id).def+staffMod(id).def+coachMod(id)}
+function rOff(id){return team(id).off+bonus(id).off+injMod(id).off+idMod(id).off+staffMod(id).off+coachMod(id)+arcMod(id,'off')}
+function rDef(id){return team(id).def+bonus(id).def+injMod(id).def+idMod(id).def+staffMod(id).def+coachMod(id)+arcMod(id,'def')}
 function starOut(id){return (S.inj||[]).some(j=>j.team===id&&j.starOut&&j.wk>0)}
 function userInj(pos){return (S.inj||[]).find(j=>j.team===S.userId&&j.star===pos&&j.wk>0)}
 /* ---------- game-day conditions: night, weather, crowd themes ---------- */
@@ -3161,7 +3295,7 @@ function weekly(w,prev){
     t.coach.heat=clamp(Math.round(t.coach.heat+d),0,100);
   }
   const fired=[];
-  if(w>=5&&w<12)for(const t of S.teams){if(t.id!==S.userId&&t.coach.heat>=96&&!t.coach.interim&&R()<.5){const r=rec(t.id);fired.push({t:t.id,old:t.coach.name,nw:fullName(),r:r.w+'-'+r.l});t.coach={name:fired[fired.length-1].nw,heat:30,yrs:0,interim:true,rt:hireRt(t,true),d:0}}}
+  try{fired.push(...arcFires(w))}catch(e){console.error(e)}
   S.inj.forEach(j=>j.wk--);S.inj=S.inj.filter(j=>j.wk>0);
   const fresh=[];
   if(w<16)for(const t of S.teams){
@@ -3182,7 +3316,7 @@ function weekly(w,prev){
 function genNews(w,prev,fresh,fired,heat0){
   const p=poll(),items=[],games=S.games.filter(g=>g.wk===w&&g.done),u=S.userId,covered=new Set();
   const N=id=>team(id).name;
-  const add=(tag,score,tm,title,body)=>items.push({tag,score,team:tm,title,body});
+  const add=(tag,score,tm,title,body,st)=>items.push(st?{tag,score,team:tm,title,body,st:1}:{tag,score,team:tm,title,body});
   for(const g of games){
     const W=winnerOf(g),Lo=W===g.h?g.a:g.h,ws=Math.max(g.hs,g.as),ls=Math.min(g.hs,g.as),mar=ws-ls;
     const dogBy=W===g.h?-(g.pl||0):(g.pl||0),wr=W===g.h?g.hr:g.ar,lr=W===g.h?g.ar:g.hr;
@@ -3195,11 +3329,11 @@ function genNews(w,prev,fresh,fired,heat0){
       b+=lr<=4?' Playoff hopes for '+N(Lo)+' just took a real hit.':' Expect a tumble in the poll.';
       add('Upset',40+dogBy*2+((PN+1)-lr)+(mine?15:0),W,t,b);covered.add(g);
     }else if(lr<=10&&wr<=PN){
-      add('Top 10',30+((PN+1)-lr)+(mine?15:0),W,wrs+N(W)+' takes down '+lrs+N(Lo),N(W)+' beat '+N(Lo)+' '+sc+'. Both teams were ranked, and this one will shape the playoff race.');covered.add(g);
+      add('Top 10',30+((PN+1)-lr)+(mine?15:0),W,wrs+N(W)+' takes down '+lrs+N(Lo),pick([N(W)+' beat '+N(Lo)+' '+sc+'. Both teams were ranked, and one of them just lost ground it needed.',N(W)+' got the better of '+N(Lo)+', '+sc+', in a game that will be quoted when the committee meets.',sc+' is the final, and '+N(Lo)+' now has a resume problem. '+N(W)+' moves to '+recStr(W)+'.',N(Lo)+' brought a top-10 ranking and left without a win. '+N(W)+' won it '+sc+' and has the tiebreaker talk to itself now.']));covered.add(g);
     }else if((g.ot||mar<=3)&&(wr<=PN||lr<=PN||mine)){
-      add('Thriller',22+(mine?15:0),W,N(W)+' survives '+N(Lo)+(g.ot?' in overtime':'')+', '+ws+'-'+ls,pick(['Nobody in the building sat down for the final drive.','It came down to the last possession.','Somebody check on the fan bases. That was a lot.']));covered.add(g);
+      add('Thriller',22+(mine?15:0),W,N(W)+' survives '+N(Lo)+(g.ot?' in overtime':'')+', '+ws+'-'+ls,pick(['Nobody in the building sat down for the final drive.','It came down to the last possession.','Somebody check on the fan bases. That was a lot.',N(W)+' needed every second of it to hold off '+N(Lo)+'.','A one-possession game that '+N(Lo)+' will replay in its head until spring.',N(Lo)+' had the ball with a chance and could not finish it.','Coaches will tell you they love these. Their blood pressure disagrees.']));covered.add(g);
     }else if(mar>=35){
-      add('Blowout',15+(wr<=PN?8:0)+(mine?15:0),W,wrs+N(W)+' hangs '+ws+' on '+N(Lo),'This one was over by halftime. '+N(W)+' won by '+mar+'.');covered.add(g);
+      add('Blowout',15+(wr<=PN?8:0)+(mine?15:0),W,wrs+N(W)+' hangs '+ws+' on '+N(Lo),pick(['This one was over by halftime. '+N(W)+' won by '+mar+'.','The backups played the fourth quarter. '+N(W)+' by '+mar+'.',N(Lo)+' never got in it. '+N(W)+' covered, then covered the cover, and won by '+mar+'.','By the third quarter people were checking other scores. '+N(W)+' by '+mar+'.']));covered.add(g);
     }
     if(mine&&!covered.has(g)){
       add('Your team',26,u,W===u?N(u)+' handles '+N(Lo)+', '+ws+'-'+ls:N(W)+' beats '+N(u)+', '+ws+'-'+ls,W===u?S.coach+' moves to '+recStr(u)+' on the year.':'A rough one for '+S.coach+'. '+N(u)+' falls to '+recStr(u)+'.');
@@ -3209,18 +3343,19 @@ function genNews(w,prev,fresh,fired,heat0){
   if(prev){let best=null;for(const id of p.slice(0,PN)){const d=(prev.indexOf(id)+1)-(p.indexOf(id)+1);if(d>=4&&(!best||d>best.d))best={id,d}}if(best)add('Poll',18,best.id,N(best.id)+' jumps '+best.d+' spots to No. '+(p.indexOf(best.id)+1),'Voters noticed. '+N(best.id)+' is '+recStr(best.id)+'.')}
   if(w>=4&&w<12){const un=S.teams.filter(t=>rec(t.id).l===0&&rec(t.id).w>0).sort((a,b)=>p.indexOf(a.id)-p.indexOf(b.id));if(un.length&&un.length<=6)add('Unbeaten watch',20+(7-un.length)*3,un[0].id,un.length===1?'One perfect team left: '+un[0].name:un.length+' unbeatens remain',un.map(t=>t.name+' ('+recStr(t.id)+')').join(', ')+'.')}
   for(const t of S.teams){
-    if(t.id===u)continue;const s=streak(t.id);
+    if(t.id===u||arcHas('seat',t.id))continue;const s=streak(t.id);
     if(!s.w&&s.n>=4&&t.prestige>=68)add('Hot seat',24,t.id,'Free fall at '+t.name+': '+s.n+' straight losses','Coach '+t.coach.name+' is '+(t.coach.heat>=80?'squarely on the hot seat.':'starting to feel the heat.'));
     else if(s.w&&s.n>=5&&w<12&&p.indexOf(t.id)>=6&&p.indexOf(t.id)<PN)add('Streak',14,t.id,t.name+' has won '+s.n+' straight','Quietly one of the hottest teams in the country.');
     if(heat0[t.id]<85&&t.coach.heat>=85)add('Hot seat',21,t.id,'Seat heats up for '+t.coach.name,'After a '+recStr(t.id)+' start, boosters at '+t.name+' are getting loud.');
   }
-  for(const f of fired)add('Coaching',38,f.t,N(f.t)+' fires '+f.old,f.old+' is out after a '+f.r+' start. '+f.nw+' takes over as interim coach.');
+  for(const f of fired)if(!f.arc)add('Coaching',38,f.t,N(f.t)+' fires '+f.old,f.old+' is out after a '+f.r+' start. '+f.nw+' takes over as interim coach.');
   for(const j of fresh){
     if(j.susp){const nx=S.games.find(g=>g.wk===w+1&&(g.h===j.team||g.a===j.team));add('Suspension',20+(p.indexOf(j.team)<PN?8:0),j.team,N(j.team)+' suspends '+j.pos+' '+short(j.name),'Violation of team rules. He sits '+(nx?'against '+N(nx.h===j.team?nx.a:nx.h):'this week')+'.');continue}
     const rk=p.indexOf(j.team)+1,out=j.wk>=99?'out for the season':'out '+j.wk+' week'+(j.wk>1?'s':'');
     if(j.team===u)add('Injury',50,u,'Injury blow: your '+j.pos+' '+j.name+' is '+out,'Backup '+j.backup+' (#'+j.bnum+') steps in. Expect your offense to take a hit.');
     else if(rk<=10||j.starOut)add('Injury',18+(rk<=10?10:0)+(j.starOut?12:0)+(j.pos==='QB'?6:0),j.team,N(j.team)+(j.starOut?' loses star ':' loses ')+j.pos+' '+short(j.name),(j.starOut?'A Heisman hopeful goes down. ':'')+short(j.name)+' is '+out+'.');
   }
+  try{arcsWeek(w,add)}catch(e){console.error(e)}
   try{dramaNews(w,add)}catch(e){}
   if(S.ad.conf<35)add('Hot seat',26,u,'Pressure mounts on '+S.coach,'Athletic director confidence is down to '+S.ad.conf+'. Boosters want results now.');
   return items.sort((a,b)=>b.score-a.score).slice(0,9);
@@ -3285,7 +3420,7 @@ function startSeason(){
   try{applyExpansion()}catch(e){console.error(e)}
   S.meritPoll=true;
   S.teams.forEach(t=>{t.cc=false;t.pr={o:0,d:0}});S.prV1=true;applyPendingTpl();if(S.confs){CONFS=S.confs;DIVS=S.divs||null}patchLeague();patchRivals();syncRivals();try{freshRivals()}catch(e){}
-  S.games=buildSchedule();tagRivals(); S.week=0; S.focus='bal'; S.post={}; S.champs={conf:[],natl:null};
+  S.games=buildSchedule();tagRivals(); S.week=0; S.focus='bal'; S.post={}; S.champs={conf:[],natl:null};S.arcs={season:S.season,list:[],m:{}};
   S.stars.forEach(s=>s.s=blankStat(s.pos));
   S.lastRecap=null; S.game=null; G=null; S.tab='week'; S.view='hub';
   patchLeague();S.inj=[];S.teams.forEach(t=>{t.star.yds=0;t.star.td=0});
@@ -5852,6 +5987,7 @@ function leagueTab(sub){
   const p=poll();let h='';if(on('scores'))h+=scoresView(p);if(on('hist')){try{h+=expandCard()}catch(e){}try{h+=classicsCard()}catch(e){}}
   const keys=Object.keys(S.news||{}).sort((a,b)=>a==='pre'?-1:b==='pre'?1:+a-+b),cur=latestNewsKey(),items=(S.news&&S.news[cur])||[];
   if(on('news')&&keys.length){
+    if(cur===latestNewsKey())try{h+=arcCard()}catch(e){}
     h+='<div class="chips wk" data-keep="lgw">'+keys.map(k=>'<button class="chip'+(k===cur?' amber':'')+'" data-act="lgw" data-w="'+k+'">'+(k==='pre'?'Preseason':+k<12?'Wk '+(+k+1):['Champ','Rd 1','QF','SF','Title'][+k-12]||'Post')+'</button>').join('')+'</div>';
     h+='<section class="card"><span class="eyebrow">'+(cur==='pre'?'Preseason storylines':weekLabel(+cur)+' storylines')+'</span>'+
       (items.length?items.map((n,i)=>'<article class="news'+(i===0?' lead':'')+'" style="--tc:'+team(n.team).color+'"><span class="tagc t-'+tagKey(n.tag)+'">'+esc(n.tag)+'</span><h3>'+esc(n.title)+'</h3><p>'+esc(n.body)+'</p></article>').join(''):'<p class="muted">A quiet week. Nobody did anything strange.</p>')+'</section>';
