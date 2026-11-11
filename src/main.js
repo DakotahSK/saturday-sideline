@@ -1781,7 +1781,8 @@ function startWatch(g){
 let WT=null;
 function watchStep(){
   if(!G||!G.watch||G.phase==='over'||SC.A)return;
-  G.meter=null;
+  G.meter=null;if(SC.ht)htClose(true);SC.wxLeave=false;
+  if(S.turbo&&G.phase!=='coin'){autoStep();G.koAnim=null;afterCommit();return}
   if(G.phase==='off'){
     const pk=offAI('u');
     if(pk==='punt'||pk==='fg'){startKick('u',kickRoll('u',pk,rnd(.5,.9)));render();return}
@@ -1796,7 +1797,8 @@ function watchStep(){
   if(G.phase==='coin'){if(G.cheer>performance.now())return;if(openCheer(()=>{autoStep();afterCommit()}))return}
   autoStep();afterCommit();
 }
-function watchSchedule(){clearTimeout(WT);if(G&&G.watch&&G.auto&&G.phase!=='over'&&!SC.A&&!G.intro)WT=setTimeout(()=>{if(G&&G.watch&&G.auto&&S.view==='game')watchStep()},S.fast?450:900)}
+function watchSchedule(){clearTimeout(WT);if(G&&G.watch&&G.auto&&G.phase!=='over'&&!SC.A&&!G.intro&&!SC.ht)WT=setTimeout(()=>{if(G&&G.watch&&G.auto&&S.view==='game'&&!SC.ht)watchStep()},S.turbo?260:S.fast?450:900)}
+function wxSkipped(){SC.wxLeave=false;if(SC.ht)htClose(true);if(G&&(G.phase==='half'||G.q>=3))G.htSeen=1}
 function finishWatch(){
   const g=S.games[G.gid];clearTimeout(WT);
   g.hs=G.su;g.as=G.sc;g.done=true;g.ot=G.ot>0;g.watched=true;
@@ -1810,9 +1812,468 @@ function watchControls(){
     const B=G.box,row=(n,x,y)=>'<span>'+n+'</span><b>'+x+'</b><b>'+y+'</b>',w=G.su>G.sc?a:b;
     return '<section class="card"><span class="eyebrow">Final</span><h2>'+esc(w.name)+' wins</h2><div class="box"><span class="h">Team stats</span><span class="h">'+a.abbr+'</span><span class="h">'+b.abbr+'</span>'+row('Total yards',B.u.yds,B.c.yds)+row('Passing',B.u.pass,B.c.pass)+row('Rushing',B.u.rush,B.c.rush)+row('First downs',B.u.fd,B.c.fd)+row('Turnovers',B.u.to,B.c.to)+'</div>'+(G.mine?'<button class="btn" data-act="finish">Go to the postgame</button>':'<button class="btn" data-act="wfinish">'+(S.watchFrom==='bracket'?'Back to the bracket':'Back to the league')+'</button>')+'</section>';
   }
-  return '<section class="card"><div class="spread"><h3>'+(G.mine?'Your staff is calling it':'Watching')+'</h3><span class="muted" style="font-size:12px">'+esc(a.abbr)+' vs '+esc(b.abbr)+'</span></div>'+
-    '<div class="row"><button class="btn" data-act="wauto">'+(G.auto?'Pause':'Play')+'</button>'+(SC.A?'<button class="btn ghost" data-act="skip">Skip play</button>':G.auto?'':'<button class="btn ghost" data-act="wstep">Next play</button>')+'</div>'+
-    '<div class="row"><button class="btn ghost small" data-act="wdrive">Sim this drive</button><button class="btn ghost small" data-act="wq">Sim to end of quarter</button><button class="btn ghost small" data-act="wend">Sim to final</button><button class="btn ghost small" data-act="fast">'+(S.fast?'Normal speed':'Fast speed')+'</button></div>'+(G.mine?'<button class="btn ghost" data-act="takeover">Take over the play calling</button>':'')+'</section>';
+  const g=S.games[G.gid],sp=!G.auto?'pause':S.turbo?'max':S.fast?'2':'1',A=SC.A;
+  const sb=(k,lab,sub)=>'<button data-act="wspd" data-s="'+k+'" aria-pressed="'+(sp===k)+'"'+(k==='pause'?' aria-label="Pause"':'')+'>'+lab+'<small>'+sub+'</small></button>';
+  const qEnd=G.ot?'':G.q===2?'Halftime':G.q===4?'':'End of Q'+G.q;
+  const back=G.mine?'the postgame':S.watchFrom==='bracket'?'the bracket':'the league';
+  return '<section class="card wx-card"><div class="wx-head"><span class="wx-live'+(G.auto?'':' off')+'"><i></i>'+(G.auto?'Live':'Paused')+'</span><b>'+(G.mine?'Your staff is calling it':esc(g&&g.neutral?b.abbr+' vs '+a.abbr:b.abbr+' at '+a.abbr))+'</b>'+
+    (SC.wxLeave?'<button class="wx-exit sure" data-act="wexit" data-sure="1">Sim the rest and leave</button><button class="wx-exit" data-act="wexit" data-no="1">Stay</button>':'<button class="wx-exit" data-act="wexit" aria-label="Leave this game, back to '+back+'">&#8592; Leave</button>')+'</div>'+
+    '<div class="wx-spd" role="group" aria-label="Playback speed">'+sb('pause','&#10074;&#10074;','Pause')+sb('1','1x','Watch')+sb('2','2x','Fast')+sb('max','Max','No replay')+'</div>'+
+    '<div class="wx-skipw"><span class="wx-lab">Skip ahead to</span><div class="wx-skip">'+(A?'<button data-act="skip">Next play</button>':'<button data-act="wstep">Next play</button>')+'<button data-act="wscore">Next score</button><button data-act="wdrive">End of drive</button>'+(qEnd?'<button data-act="wq">'+qEnd+'</button>':'')+'<button data-act="wend">Final</button></div></div>'+
+    wxDrive()+(G.mine?'<button class="btn ghost small" data-act="takeover">Take over the play calling</button>':'')+'</section>';
+}
+
+/* =================== GAME DAY COMPANION: watch UI (wx-), fan chat (fc-), halftime show (ht-) ===================
+   Nothing here is saved except four small fields on G: ln (log counter), sco (scoring plays), hs (halftime snapshot), htSeen.
+   The chat lives in SC.fc and the open halftime show in SC.ht, so neither one ever reaches the save. */
+function wxScore(side,n){
+  if(!G)return;const L=G.sco=G.sco||[],last=L[L.length-1];
+  if(n===1&&last&&last.s===side&&last.p===6&&!last.x){last.x=1;last.su=G.su;last.sc=G.sc;return}
+  if(n===2&&G.phase==='live'&&last&&last.s===side&&last.p===6&&!last.x){last.x=2;last.su=G.su;last.sc=G.sc;return}
+  L.push({s:side,p:n,q:G.ot?5:G.q,c:Math.round(G.clock),su:G.su,sc:G.sc,d:n===6&&G.log[0]?String(G.log[0].t).slice(0,70):''});if(L.length>40)L.shift();
+}
+function wxSides(){return !(G.uHome||G.neutral)?['u','c']:['c','u']}
+function wxCol(t){try{return lum(t.color||'#888')<.09?(t.color2&&lum(t.color2)>=.09?t.color2:'#aab2c2'):t.color}catch(e){return t.color||'#888'}}
+function wxDrive(){
+  const live=['off','def','live','ckick'].includes(G.phase)&&!G.pat2,o=G.poss,T=teamOf(o),[sl,sr]=wxSides(),u=teamOf(sl),c=teamOf(sr);
+  let txt,sub,bar='';
+  if(!live){txt=G.phase==='coin'?'Coin toss':G.phase==='half'?'Halftime':G.pat2?'Two-point try':['pat','patk'].includes(G.phase)?'Extra point':'Kickoff';sub=G.phase==='half'?esc(teamOf(G.kickFirst).abbr)+' gets the ball to open the third quarter':G.phase==='coin'?'Kickoff is next':'';}
+  else{const D=G.drive||{n:0,y:0,t0:G.clock,q0:G.q},el=G.ot?0:Math.max(0,D.q0===G.q?D.t0-G.clock:D.t0+(G.q-D.q0-1)*G.qlen+(G.qlen-G.clock));
+    const fw=o===sl,pos=fw?G.ball:100-G.ball,st=clamp(fw?G.ball-D.y:100-(G.ball-D.y),0,100),ltg=G.togo>=100-G.ball?null:(fw?G.ball+G.togo:100-G.ball-G.togo),lo=Math.min(pos,st),w=Math.abs(pos-st);
+    txt=esc(T.abbr)+' drive';sub=D.n+' play'+(D.n===1?'':'s')+' · '+D.y+' yd'+(Math.abs(D.y)===1?'':'s')+(G.ot?'':' · '+fmtClock(el));
+    bar='<div class="wx-fld" aria-hidden="true"><span class="wx-ez" style="background:'+u.color+'"></span><div class="wx-grass"><i class="wx-dr" style="left:'+lo+'%;width:'+w+'%;background:'+wxCol(T)+'"></i>'+(ltg!=null?'<i class="wx-ltg" style="left:'+ltg+'%"></i>':'')+'<i class="wx-ball" style="left:'+pos+'%"></i></div><span class="wx-ez" style="background:'+c.color+'"></span></div>';
+    sub+='</span><span class="wx-dn">'+(G.phase==='ckick'?(G.ckick==='fg'?'Field goal try':'Punt'):ord(G.down)+' &amp; '+(G.togo>=100-G.ball?'Goal':G.togo))+' · '+esc(spotText());
+  }
+  return '<div class="wx-drive"><div class="wx-dl"><b><i class="wx-dot" style="background:'+(live?wxCol(T):'var(--muted)')+'"></i>'+txt+'</b><span>'+sub+'</span></div>'+bar+'</div>';
+}
+function wxStats(){
+  const [sl,sr]=wxSides(),B={u:G.box[sl],c:G.box[sr]},u=teamOf(sl),c=teamOf(sr),cu=wxCol(u),cc=wxCol(c),pl=s=>(G.calls||[]).filter(x=>x.side===s).length,pu=pl(sl),pc=pl(sr),tu=teamOf('u');
+  const row=(n,x,y,inv)=>{const fx=Math.max(0,+x)||0,fy=Math.max(0,+y)||0,none=fx+fy===0;return '<div class="wx-sr"><b class="num'+(!none&&(inv?fx<fy:fx>fy)?' ld':'')+'">'+x+'</b><span>'+n+'</span><b class="num'+(!none&&(inv?fy<fx:fy>fx)?' ld':'')+'">'+y+'</b><div class="wx-bar"><i style="flex:'+(none?1:fx)+';background:'+cu+'"></i><i style="flex:'+(none?1:fy)+';background:'+cc+'"></i></div></div>'};
+  const st=G.st,ld=st&&(st.qb.att||st.rb.car)?'<div class="wx-ld"><span class="eyebrow">'+esc(tu.abbr)+' leaders</span><span class="num">'+esc(nmS('u','QB'))+': '+st.qb.cmp+'/'+st.qb.att+', '+st.qb.yds+' yds, '+st.qb.td+' TD, '+st.qb.int+' INT</span><span class="num">'+esc(nmS('u','RB'))+': '+st.rb.car+' car, '+st.rb.yds+' yds, '+st.rb.td+' TD</span><span class="num">'+esc(nmS('u','X'))+': '+st.wr.rec+' rec, '+st.wr.yds+' yds, '+st.wr.td+' TD</span></div>':'';
+  return '<div class="wx-st"><div class="wx-sth"><span>'+mlogo(u)+esc(u.abbr)+'</span><span>Team stats</span><span>'+esc(c.abbr)+mlogo(c)+'</span></div>'+row('Total yards',B.u.yds,B.c.yds)+row('Passing',B.u.pass,B.c.pass)+row('Rushing',B.u.rush,B.c.rush)+row('First downs',B.u.fd,B.c.fd)+row('Turnovers',B.u.to,B.c.to,true)+row('Plays',pu,pc)+row('Yards per play',pu?(B.u.yds/pu).toFixed(1):'0.0',pc?(B.c.yds/pc).toFixed(1):'0.0')+ld+(G.hs?'<button class="btn ghost small" data-act="htopen">Replay the halftime report</button>':'')+'</div>';
+}
+function wxScoring(){
+  const L=G.sco||[];if(!L.length)return '<p class="muted wx-empty">'+(G.su+G.sc?'Scoring plays from before this update were not tracked.':'No score yet.')+'</p>';
+  let h='',q=0;const u=teamOf('u'),c=teamOf('c');
+  for(const x of L){if(x.q!==q){q=x.q;h+='<div class="wx-sq">'+(q>4?'Overtime':ord(q)+' quarter')+'</div>'}const T=x.s==='u'?u:c;
+    const what=x.p===6?'Touchdown'+(x.x===1?' (kick good)':x.x===2?' (2-pt good)':''):x.p===3?'Field goal':x.p===2?(x.q>4||!x.d?'Safety':'Two-point try'):x.p===1?'Extra point':x.p+' points';
+    h+='<div class="wx-sp"><span class="wx-sc num">'+(x.q>4?'OT':fmtClock(x.c))+'</span><span class="wx-sw"><b><i class="wx-dot" style="background:'+wxCol(T)+'"></i>'+esc(T.abbr)+' '+(x.p===2&&!x.d?'Safety':what)+'</b>'+(x.d?'<small>'+esc(x.d)+'</small>':'')+'</span><span class="wx-ss num">'+(G.uHome||G.neutral?x.sc+'-'+x.su:x.su+'-'+x.sc)+'</span></div>'}
+  return '<div class="wx-sco"><div class="wx-sq wx-sqh"><span>'+(G.uHome||G.neutral?esc(c.abbr)+' - '+esc(u.abbr):esc(u.abbr)+' - '+esc(c.abbr))+'</span></div>'+h+'</div>';
+}
+function wxPlays(){return '<ul class="log">'+G.log.slice(0,30).map(l=>'<li class="'+l.k+'"><span class="tg">'+l.g+'</span><span>'+esc(l.t)+'</span></li>').join('')+'</ul>'}
+const WX_TABS=[['chat','Fan chat'],['plays','Plays'],['stats','Stats'],['score','Scoring']];
+function wxTab(){const t=S.gdTab||'chat';return WX_TABS.some(x=>x[0]===t)?t:'chat'}
+function wxTabsRefresh(){
+  const el=document.getElementById('wx-tabs');if(!el)return;const tab=wxTab(),F=SC.fc,un=tab!=='chat'&&F&&F.unread>0,k=tab+(un?'!':'');
+  if(el._h===k)return;el._h=k;el.innerHTML=WX_TABS.map(([id,n])=>'<button role="tab" data-act="gdtab" data-t="'+id+'" aria-selected="'+(tab===id)+'">'+n+(id==='chat'&&un?'<i class="wx-un" aria-label="New messages"></i>':'')+'</button>').join('');
+}
+function gdRender(){
+  if(typeof document.getElementById!=='function'||!G)return;const el=document.getElementById('g-dock');if(!el)return;
+  try{fcSync()}catch(e){}
+  try{if(SC.ht&&!SC.ht.replay&&G.phase!=='half')htClose(true);htMaybe()}catch(e){}
+  if(!el._init){el._init=1;el.innerHTML='<div id="wx-hb"></div><section class="card wx-dock"><div class="wx-tabs" id="wx-tabs" role="tablist"></div><div id="wx-pane"></div></section>'}
+  const hb=document.getElementById('wx-hb'),hk=G.phase==='half'&&!SC.ht?'1':'';if(hb&&hb._h!==hk){hb._h=hk;hb.innerHTML=hk?'<button class="ht-bar" data-act="htopen"><b>Halftime report</b><span>Scores and storylines from around the league</span></button>':''}
+  wxTabsRefresh();
+  const pane=document.getElementById('wx-pane');if(!pane)return;const tab=wxTab();
+  if(tab==='chat'){if(pane._tab!=='chat'||pane._gid!==G.gid){pane._tab='chat';pane._gid=G.gid;pane._h=null;fcMount(pane)}return}
+  const h=tab==='plays'?wxPlays():tab==='stats'?wxStats():wxScoring();
+  if(pane._tab!==tab||pane._h!==h){const keep=pane._tab===tab?pane.scrollTop:0;pane._tab=tab;pane._h=h;pane.innerHTML='<div class="wx-pane">'+h+'</div>';if(keep)pane.scrollTop=keep}
+}
+/* every click handled here returns true and skips the save and full render */
+function gdAct(a,d){
+  if(a==='gdtab'){S.gdTab=d.t;if(d.t==='chat'&&SC.fc)SC.fc.unread=0;gdRender();return true}
+  if(a==='fcbot'){const el=document.getElementById('fc-list');if(el){el.scrollTop=el.scrollHeight;fcPill(false)}return true}
+  if(a==='htopen'){if(G&&S.view==='game')htOpen(true);return true}
+  if(a==='htnext'){htGo(1);return true}
+  if(a==='htprev'){htGo(-1);return true}
+  if(a==='htskip'){htClose();return true}
+  return false;
+}
+function gdStep(dt){
+  if(!G||!S||S.view!=='game')return;const F=fcState();if(!F)return;F.t+=dt;F.acc=(F.acc||0)+dt;if(F.acc<.2)return;F.acc=0;
+  let n=0;while(F.qu.length&&F.qu[0].at<=F.t&&n++<2)fcPush(F.qu.shift());
+  if(F.qu.length||F.t<F.amb||G.intro||G.phase==='over'||(G.watch&&!G.auto&&!SC.A)||F.ambN>=3)return;
+  F.amb=F.t+rnd(4.5,9.5)*(S.fast?.65:1);F.ambN++;fcAmb();
+}
+
+/* ---------- live fan chat: line bank. Slots: {t}/{o} abbrs, {m}/{om} mascots, {p} player, {y} yards, {us}/{th} score, {lead}, {coach}, {qb} {rb} {wr}, {trophy}, {n} ---------- */
+const FC_SHOUT=['TOUCHDOWN','TOUCHDOWN {t}','LETS GO','LETS GOOO','YES','YES SIR','SIX','THERE IT IS','BANG','PAYDIRT','HOW ABOUT THAT','GET IN THERE','OH BABY','WOOOO','THAT IS SIX','{m} TOUCHDOWN','RING THE BELL','SCORE','IN THE END ZONE','GOT EM'];
+const FC_OOF=['oof','pain','ugh','no no no','well.','yikes','come on','not like this','I am going to be sick','why','good grief','mercy','oh brother','welp','great. just great.','I need to sit down'];
+const FC_YAY=['LETS GO','yes yes yes','wow','WOW','huge','sheesh','what a play','love it','oh my','beautiful','there we go','about time','big time','that works','keep it rolling','goodness'];
+const FCT={
+ 'td.g':['{p} would not be denied.','{p} walked in untouched.','Give {p} the game ball right now.','That drive was a thing of beauty.','Nobody in a {o} jersey laid a hand on him.','I spilled my popcorn and I do not care.','My whole row is hugging strangers.','{us}-{th}. Keep the foot down.','That is how you finish a drive.','Coach {coach} dialed that one up.','The band is going to wear out the fight song today.','{p} is a problem and {o} has no answer.','They could not cover {p} with a tarp.','I felt the bleachers move on that one.','I called it. Ask my wife. I called it.','Put it on the board.','Too easy.','That is what we came for.','Scoreboard says {us}-{th} and I like the look of it.','Somebody check on the {o} defense.','This offense is humming.','{p} again. Feed him all day.','You love to see it.','Dancing in the kitchen. The dog is confused.','I am not sitting down the rest of the game.','The {m} are rolling.','Great push up front. The big fellas earned their supper.','{p} has been waiting all week for that one.','Neighbors just knocked on the wall. Sorry not sorry.','That is {us} for the good guys.','Play call, execution, celebration. All of it perfect.','{o} looked lost on that whole drive.','Somebody get {p} a water and a raise.','My kid just did the {m} touchdown dance on the couch.','We wanted it more on that drive. Simple as that.','They had no idea what was coming.','Clip that and send it to every recruit in the state.','More of that please.','{p}! Remember the name.','I have chills. Actual chills.'],
+ 'tdlong.g':['{y} yards to the house!','{p} is GONE. {y} yards.','Nobody was catching {p}.','One play. {y} yards. Six points.','Did anybody on {o} even touch {p}?','See you later. {y} yards.','{p} had a whole zip code to himself.','That is track speed right there.','{y} yards and he was not even breathing hard.','Blink and {p} is in the end zone.','{o} took a bad angle and {p} made them pay for {y} yards.','Longest play of the day and it is ours.','He ran right past our section. I waved.','They are going to see {p} in their sleep tonight.'],
+ 'td.b':['Nobody covered him. NOBODY.','Can we tackle? Just once?','That was way too easy.','Defense needs to wake up.','{p} is going to do that all day if we let him.','Well, that drive took no time at all.','Somebody please get off the field on third down.',"I can't watch.",'We made that look like a walkthrough for them.','Who had {p}? Anybody?','That is on the defense. All of it.','We knew {p} was getting the ball and still could not stop it.','Okay. Answer right back. Please.','Not panicking. Mildly panicking.','Arm tackles are not tackles.','Give {o} credit, that was a good drive. I hate it.','Our defense has been on the field all day.','Coach {coach} needs to change something, quick.','Too many guys standing around watching.','I turned to get a drink and they scored.','They are picking on the same spot every time.','We are a step slow today.','That one stings.','Shake it off. Long way to go.','Their sideline is having way too much fun.','Bend but do not break turned into just break.','Somebody make a play. Anybody.','The {om} wanted that drive more than we did.','That is a bad look for the secondary.','Missed assignment written all over that.'],
+ 'fg.g':['Three is three. Take it.','Right down the middle.','Kicker is money today.','Points are points.','Would have liked seven but I will not complain.','Good kick. Keep stacking.','{us}-{th}. Chip away.','That is why you recruit a kicker.','He hit that one clean.','Automatic.','The drive stalled but we still get paid.','Good from {y}. Plenty of leg.','Every point matters in a game like this.','Split the uprights. Next.'],
+ 'fg.b':['Held them to three. I will take it.','Good stand by the defense.','Field goal is a win for us there.','Bend, do not break. Fine.','Only three. Could have been worse.','Red zone defense showed up.','They settle. Now go answer.','Three points we should not have given up, but okay.'],
+ 'fgmiss.g':['NO GOOD. Thank you very much.','Wide! Keep the change.','The kicker felt us. That was the crowd.','Not even close.','Pressure makes people do funny things.','Big miss. Huge break for us.','Icing works, folks.','Doinked it. Beautiful sound.','He pushed it. We will take the gift.','That is a momentum swing right there.'],
+ 'fgmiss.b':['You have to make that kick.','All that work for nothing.','Wide. Of course.','Our kicker owes the offense an apology.','That miss is going to matter later.','Leaving points on the field again.','I could have made that. In boots.','Kicking tryouts on Monday.','Can we just go for it next time?','Sigh. Wide {n}.'],
+ 'patmiss.b':['We missed the extra point? The EXTRA point?','That one point is going to come back to haunt us.','Kicker, buddy. Come on.'],
+ 'patmiss.g':['They missed the PAT! That could matter.','No good on the extra point. Every point counts.','Ha. Missed the kick. Thank you.'],
+ 'int.g':['PICKED OFF','{p} with the interception!','{p} read that the whole way.','Thank you very much, we will take that.','That ball was a gift and we unwrapped it.','{p} was sitting on that route.','Their QB threw it right to us.','BALL HAWK. {p}.','The secondary has been waiting for that one.','Momentum just flipped. You can feel it.','Turnover! Now go cash it in.','Great coverage, better hands.','Our defense is taking the ball away again.','He stared it down the whole way and {p} said thank you.','That is film study paying off.','Takeaway! Offense, your turn.'],
+ 'int.b':['Why would you throw that?','{qb}, what did you see there?','Right to the other team. Wonderful.','That was into triple coverage.','You cannot throw that ball. You just cannot.','Run the ball, please, I am begging.','Killed a good drive.','That is a freshman mistake.','He never saw {p}.','We keep beating ourselves.','Somebody hide the ball from {qb} for a series.','Tipped or not, that is ours to protect.','Protect the football. Rule one.','Bad decision, worse timing.','There goes the drive.','I said run it. I said it out loud.'],
+ 'fum.g':['FUMBLE! We got it!','Ball is out and it is OURS.','Stripped him clean!','Great hustle to fall on that.','That is what punching at the ball gets you.','Defense makes the play again.','Thank you for the football, {o}.','Turnover! This crowd is going wild.','Pile cleared and our guy had it.','They put it on the ground and we pounced.','Huge. Just huge.','Hat on the ball. Textbook.'],
+ 'fum.b':['Hold onto the ball!','Two hands. TWO HANDS.','You cannot put it on the ground there.','Fumble. Of course it is.','High and tight, son. High and tight.','That is a drive killer.','Ball security drills all week, I hope.','We are giving this game away.','He was down! He was down, right?','Carry it like it is your little sister.','Turnovers are going to cost us this one.','Unforced. That hurts the most.'],
+ 'sack.g':['SACK!','{p} got home!','{p} is living in their backfield.','Their line cannot block {p}.','Pressure all day.','Get him on the ground! Yes!','QB never had a chance.','That is a drive wrecker.','{p} wanted that one bad.','Coverage sack. Everybody did their job.','Their QB is seeing ghosts now.','Big fella got there in a hurry.'],
+ 'sack.b':['Block somebody. Please.','{qb} had no time at all.','Our line is getting whipped.','Throw it away! Just throw it away!','That is on the tackle. Got beat clean.','He is going to get hurt back there.','Nobody picked up {p}?','Hold onto it any longer and you can pay rent back there.','Line play is losing us this game.','Get the ball out quicker.'],
+ 'big.g':['{p} for {y}!','What a play by {p}.','{y} yards just like that.','{p} is cooking.','They cannot stay with {p}.','Chunk play. We needed that.','That is a grown man play.','{qb} dropped that in a bucket.','Broke it wide open for {y}.','That woke everybody up.','Great call, better execution.','{p} had room and used all of it.','Now we are moving.','Move those chains!','Explosive. Finally.','{y} more where that came from.'],
+ 'big.b':['Wrap up!','{y} yards? On that?','Nobody within five yards of {p}.','Busted coverage.','We are getting gashed.','Somebody get {p} on the ground.','That is too much cushion.','Missed three tackles on one play.','Where is the safety help?','Giving up chunk plays all day.','Bad angle. Again.','Our linebackers are lost out there.'],
+ 'stop4.g':['STOPPED ON FOURTH','Turnover on downs! Defense!','They went for it and we said no.','What a stand.','Not today. Not on fourth down.','That is a turnover as far as I am concerned.','Goal line defense is no joke.','Coach {coach} has that defense ready.','They got greedy and paid for it.','Biggest stop of the day.','Crowd was LOUD on that snap.','Stuffed. Our ball.'],
+ 'stop4.b':['Why are we going for it there?','Kick it. Just kick it.','Came up short. Again.','That is a bad spot. Bad spot!','Terrible call on fourth down.','We needed one yard. ONE.','Handed them the ball and the momentum.','I liked the nerve. Hated the play.','Who runs that on fourth and short?','Analytics said go. Analytics does not play left guard.'],
+ 'stuff.g':['Nothing there. Great fill.','Stood him up at the line.','Run defense is locked in.','No gain. Love it.','They cannot run on us.','Met him in the hole.','Backfield party.','Good penetration up front.'],
+ 'punt.g':['Three and out! Get the ball back.','Good series by the defense.','Off the field. Just like you draw it up.','Punt team is on. Good work, D.','That is how you answer.','They are punting again. Keep it up.','Defense is flying around.','Field position game is ours right now.'],
+ 'punt.b':['Punting again.','Three and out. Give the defense a breather, would you?','Our punter is getting a workout.','Can not buy a first down.','Play calling is way too predictable.','Offense is stuck in the mud.','Run, run, pass, punt. I know the script by heart.','At least we can punt.'],
+ 'puntret.g':['Big return! Short field.','Special teams showing up.','He nearly took that one all the way.','That return flipped the field.'],
+ 'krtd.g':['ALL THE WAY BACK','Kick return for a touchdown! Are you kidding me?','Nobody touched him. House call.','Special teams touchdown! When does that ever happen?','I was still in the snack line. Somebody tell me what I missed.'],
+ 'krtd.b':['Cover the kick. COVER THE KICK.','Special teams just gave away seven.','That is a coaching problem.','Kick it out of the end zone next time.'],
+ 'safety.g':['SAFETY! Two points and the ball!','Got him in the end zone!','Defense puts points on the board.','A safety. You do not see that every week.'],
+ 'safety.b':['A safety. We gave up a safety.','You cannot take a sack in your own end zone.','That is about as bad as it gets.','Points and the ball. Wonderful.'],
+ 'two.g':['Two points! Coach {coach} has some nerve.','Got the conversion!','Gutsy call and it worked.','That is a big two.'],
+ 'two.b':['They got the two. Of course they did.','Could not keep them out on the try either.'],
+ 'twofail.g':['No good on the two! Big stop.','Denied on the conversion.','They got cute and it cost them.'],
+ 'twofail.b':['Why go for two there?','Just kick it. Take the point.','Chasing points already. Bad sign.'],
+ 'onrec.g':['WE GOT THE ONSIDE KICK','Recovered it! Are you serious?','Coach {coach}, you beautiful gambler.','Hands team asleep. We have the ball!','Never give up. NEVER.'],
+ 'onrec.b':['How do you not recover that?','Hands team had ONE job.','You have got to be kidding me.','This game is trying to give me gray hair.'],
+ 'onfail.g':['Fell on it. Short field for us.','Nice try. Our ball.','Hands team did its job.'],
+ 'onfail.b':['Onside did not work. Had to try.','That was our last shot, I think.','Good idea, bad bounce.'],
+ 'to':['Timeout {o}. They are rattled.','Good timeout. Settle down and get the call right.','Burning timeouts already? We will want those later.','Timeout. Time for a snack run.','Coach {coach} did not like what he saw.','Save those timeouts, Coach.'],
+ 'fd':['Move the chains.','First down. Keep it going.','That is a fresh set of downs.','Methodical. I like it.','Another first down. Wear them out.','Staying on schedule.','Nice and easy. Keep leaning on them.','Good drive so far. Finish it.','{p} keeps the drive alive.','They cannot get us off the field.'],
+ 'inc':['Had him open. Just missed.','Catch the ball!','Good coverage there.','{qb} is a little off right now.','Throw it to the guys in our jerseys, please.','That was a drop. Plain and simple.','Overthrown. Settle down.','Nice breakup by the defense.','Wide open and we missed him.','Get the run game going.'],
+ 'play':['Okay, that works.','Keep feeding {p}.','{p} always falls forward. Love that.','Nice gain on first down.','Stay on schedule.','{p} is running hard today.','Good, physical football.','Short gain. Keep chopping.','Our line is getting a push.','They are stacking the box.','Mix it up, Coach.','Run it again.','I like the tempo right now.','That is a tough yard.','{p} is going to be sore tomorrow.','Dink and dunk all the way down the field. Fine by me.','Check down city.','Patience. It will open up.','Nothing fancy, just football.','{o} is selling out on the run.','Decent. Decent.','We need to get {wr} involved.','Let {qb} throw it.','Old school drive. My dad would love this.'],
+ 'ref':['How is that not holding?','Refs missed a hold right in front of them.','That was pass interference. Call it both ways.','Blue hair could see that from the parking lot.','Did they leave the flags in the truck?','These officials are having a day.','Check the monitor. Oh wait, we do not have one.','Bad spot. He had that by a yard.','I counted twelve men on the field. Twelve.','Hands to the face all afternoon and nothing.','Late hit. Out of bounds. No flag. Sure.','The zebras are not helping.','Let them play. Or do not. Just pick one.','Somebody send the conference office the tape.','That clock operator is on their payroll.','False start every snap and they never call it.','I would like to file a formal complaint with the chain gang.','He stepped out at the 30. I saw it.'],
+ 'lead':['Up {lead}. Do not let up.','{us}-{th}. So far so good.','Keep your foot on the gas.','We are the better team. Play like it.','Nice lead. I still do not trust it.','Up {lead} and it feels like more.','Up {lead} and it feels like less.','Just keep doing what we are doing.','Play the next snap. Scoreboard takes care of itself.','I will relax when the clock says zero.','{m} by {lead}. Stay hungry.','Do not go conservative on me now, Coach.'],
+ 'trail':['Down {lead}. Plenty of time.','We are fine. We are fine. Are we fine?','Need a spark here.','{th}-{us}. We have seen worse.','Somebody make a play.','One score at a time.','Still believe. Mostly.','Down {lead}. Time to find out what this team is made of.','We always make it hard on ourselves.','Just get a stop. That is all I ask.','This is where leaders show up.','Halfway to a comeback is still losing. Go get it.'],
+ 'tied':['All square at {us}.','Tied up. My heart cannot take four quarters of this.','Whole new ball game.','{us}-{us}. Next score is big.','Even game. Somebody blink.','This is going down to the wire, I can feel it.','Tie game. Deep breath.','Knotted at {us}. Who wants it?'],
+ 'flip.g':['WE HAVE THE LEAD','First lead of the day. Now keep it.','Back in front!','{us}-{th}, good guys.','Lead change! This game is something else.','There it is. Now protect it.','On top where we belong.','Took the lead and the crowd with it.'],
+ 'flip.b':['And just like that we are behind.','Lost the lead. Answer back.','Well, that lead was nice while it lasted.','Now we have to chase.','Gave it right back.','Lead is gone. Wake up.'],
+ 'blowW':['This is getting out of hand and I love it.','Up {lead}. Get the young guys some snaps.','{us}-{th}. Call off the dogs. Or do not.','Bus driver can go ahead and warm it up.','We are putting on a clinic.','The backups are stretching.','Is there a mercy rule in this league?','Their fans are heading for the exits.','{lead} point lead. Time to empty the bench.','I am almost bored. Almost.','Somebody check on the {o} chat.','Statement game.','This is what we thought we had back in August.','We can name the score today.','Running clock would be the kind thing.','Starters have earned a seat.','Never in doubt. Not for one second.','Save some of these points for next week.','Is it too early to start the bus?','Might be the best we have looked all year.','Easy money. Enjoy it, these do not come often.','The scout team is about to get real snaps.'],
+ 'blowL':['I have seen enough.','Down {lead}. This is embarrassing.','{th}-{us}. Turn it off.','Long ride home.','We did not get off the bus today.','Somebody has to answer for this.','I paid for parking for this?','Play the freshmen. See who wants to be here.','There is always next week. Right?','Going to go rake leaves instead.','Outcoached, outplayed, out everything.','Nobody panic. Okay, everybody panic.','This one is going to leave a mark.','We look like we met in the parking lot this morning.','At least the band sounds good.','I am staying to the end. Somebody has to.','Burn the tape.','My father-in-law is a {om} fan. Thanksgiving is ruined.','We are getting it handed to us.','Start the hot seat watch for Coach {coach}.','Rock bottom has a basement, apparently.','Praying for a running clock.'],
+ 'rally.g':['Do not look now.','We are back in this thing!','One score game. I told you not to leave.','Here we come.','The comeback is ON.','Down {lead} with all the momentum.','They are getting nervous over there.','Never count out the {m}.','Was down big and now it is a ballgame.'],
+ 'rally.b':['Do not let them back in this.','This lead is shrinking fast.','Wake up, we are giving it away.','Up {lead} and I am sweating.','Put them away already.','We took our foot off the gas and look.','Prevent defense prevents winning.'],
+ 'close':['One score game late. This is what it is all about.','I cannot feel my hands.','Whoever has it last wins.','Every snap feels like the whole season.','My stomach is in knots.','Who needs fingernails anyway?','This is a heavyweight fight.','Nobody leave. Nobody.','Pacing the living room now.','Just need one more play from somebody.','This is why we watch.','Great game. I hate it.','If we pull this out I am going to need a week to recover.','Standing for the rest of this one.','Wife says I have to calm down. Not happening.','Crunch time.'],
+ 'upset.dog':['Nobody gave us a chance today.','UPSET ALERT and we are the alert.','They did not respect us coming in. They do now.','Keep believing. This is happening.','The whole league is watching this one right now.','We were supposed to lose by {n}. Somebody tell the scoreboard.','Finish it. FINISH IT.','Shock the world. Or at least the conference.','Vegas is sweating.','Ranked teams are not supposed to look that confused.'],
+ 'upset.fav':['We are sleepwalking through this.','Cannot lose this game. Cannot.','This is a trap game and we walked right in.','We were favored by {n}. Play like it.','Overlooked them. You can tell.','There goes the ranking if we do not wake up.','The committee is watching this, guys.','No excuse for this. None.','Good teams do not play down like this.','If we lose this one, do not talk to me for a week.'],
+ 'riv':['I do not care about the record. Beat {o}.','Throw the records out. It is {o} week.','There is nothing better than hating {o} for three hours.','I have not spoken to my {o} cousin since Tuesday.','The {trophy} belongs with us.','Bring the {trophy} home.','A win today makes the whole season.','{o} fans are awfully quiet in here.','We do not like them. They do not like us. Perfect.','My boss is a {om} fan. I need this one for Monday.','Best week of the year.','You can feel how much these teams dislike each other.','Little brother is chirping again.','Their fight song sounds like a doorbell.','Nothing but respect for {o}. Okay, very little respect.','Forty years of this rivalry and it never gets old.','Lose to {o} and you hear about it for 364 days.','Everybody in town is either here or lying about it.','The {trophy} game. Nothing else on the schedule comes close.','Pastor said to love your neighbor. He did not say during the {o} game.','I have hated the {om} since I was six.','Keep it classy. But beat them by forty.'],
+ 'rank':['Ranked teams take care of business. Do it.','We look like a top {n} team right now.','Voters are watching. Style points count.','That number next to our name means nothing if we lose.','A win here and we move up.','Playoff teams finish games like this.','Do not give the pollsters a reason.','We belong in that top {n}. Prove it.','Rankings are for talk radio. Just win.','This is a resume game.'],
+ 'unrank':['Beat a ranked team and people start paying attention.','No number next to our name. No pressure either.','Knock them off and we are in the poll Monday.','Nobody has us on their ballot. Good.','This is how you get noticed.','Let them be ranked. We will just be better today.'],
+ 'rain':['Soaked to the bone and not leaving.','Ball is slick. Hold onto it.','Poncho section checking in.','Sloppy track today. Run the ball.','Rain game. Whoever fumbles less wins.','My program is papier mache now.','This weather favors the tougher team.','Field is a mess. Love it.'],
+ 'snow':['Snow game! These are the best.','Cannot feel my toes. Worth it.','Somebody is going to slip on that paint.','Hot chocolate line is longer than the first half.','Football in the snow is how it is supposed to be.','The grounds crew is earning it today.','Bundle up and run the ball.','Kicking in this is going to be an adventure.'],
+ 'wind':['That wind is going to matter on kicks.','Flags are standing straight out.','Keep it on the ground in this wind.','Deep ball is a prayer today.','Hold onto your hats. Literally.','Wind took my nachos. Tough day.','Take the wind in the fourth. Smart.'],
+ 'night':['Nothing like a night game.','Under the lights. This is the good stuff.','Night games hit different.','Lights are on and this place is jumping.','Been tailgating since noon for this.','The stadium looks great under the lights.'],
+ 'life':['Concession stand ran out of hot dogs already.','Band sounds great today.','Who is bringing what to the potluck tomorrow? I have deviled eggs.','Parking was a nightmare. Worth it.','Tailgate brisket was the best I have ever made. Not bragging. A little.','Stream is a few seconds behind. Nobody spoil it.','Section 112 is loud today.','Halftime show better have the alumni band.','Grandma is watching from the home and yelling at the TV.','Kids are in the bounce house. I am locked in.','Whoever is running the scoreboard, turn it up.','First game for my little one. Hooked for life.','Watching from the deer stand. Signal is spotty.','Wearing the lucky hat. You are welcome.','I have sat in the same seat since the old stadium.','The student section showed up today.','Somebody behind me will not stop ringing a cowbell. Respect.','Got the grill going at home with the game on the porch.','Choir practice is going to be hoarse tomorrow.','Listening on the radio in the truck. Do not ask.','Third row. My voice is already gone.','The popcorn guy knows my order by now.','Saw Coach {coach} at the grocery store Thursday. Looked confident.','Whole youth group made the trip.','Church bus made it with ten minutes to spare.','Our drumline is undefeated.','Kettle corn is the real MVP.','Folding chair, cooler, football. Perfect Saturday.','Wife says we are painting the bedroom after this. Praying for overtime.','I had to explain the option to my daughter. Proud dad moment.','Getting texts from my brother. He is a {om} fan. Ignoring them.','Nachos at this place are underrated.','Snuck a radio into a wedding for this. No regrets.','Anybody else here since warmups?','Our mascot just won a dance off on the sideline.','The fight song is going to be stuck in my head till Wednesday.','Bless whoever invented the stadium seat cushion.','Sunday school lesson is going to be short if we lose.','Fellowship hall is showing the game on the big screen.','Deacon two rows up has not sat down once.'],
+ 'coach':['Coach {coach} has them ready today.','I trust Coach {coach}. Most of the time.','Coach {coach} is working the officials already.','Good plan today from the staff.','Open it up, Coach {coach}.','Coach {coach} looks calm. I am not calm.','Somebody on that staff can really call a game.','Adjustments, Coach. They have figured us out.','Coach {coach} has that look.','Say what you want, Coach {coach} gets them to play hard.'],
+ 'star':['{qb} looks sharp today.','Get {rb} twenty carries and go home.','{wr} is open every single play.','{qb} has to be better than this.','{rb} is a load.','Throw it to {wr}. It is not complicated.','{qb} is seeing the field well.','When {rb} gets going, we win. Simple.','{wr} needs more touches.','{qb} to {wr} is going to be a problem all year.','{rb} runs like he is late for supper.','Keep {qb} upright and we are fine.'],
+ 'mom.g':['All the momentum is on our side.','They are on their heels.','You can feel it turning.','Our sideline is jumping.','Smell blood. Go get them.','This place is rocking right now.','Everything is clicking.','We are imposing our will.'],
+ 'mom.b':['We need something to stop the bleeding.','All the momentum is over there.','Somebody make a play and flip this.','Getting pushed around right now.','Call a timeout and settle everybody down.','We are flat. Wake up.','They want it more right now.','Quiet the crowd down. One good drive.'],
+ 's3.off':['Big third down.','Third and {n}. Got to have it.','Convert here. Keep the drive alive.','Stay on the field.','Third down. Everybody up.','Give it to your playmaker here.','Money down.','Need {n} yards. Do not get cute.'],
+ 's3.def':['Get off the field!','Third and {n}. Make a stop.','Big third down for the defense.','Everybody up! Third down!','Bring pressure.','Do not give up the easy one here.','Third down. Get loud.','One stop. That is all we need.'],
+ 's4':['Fourth down. Are they going for it?','Go for it, Coach.','Fourth and {n}. Decision time.','Kick it or go? I would go.','Take the points if they are there.','Big decision here.'],
+ 'rz.off':['Red zone. Finish it.','Punch it in.','No field goals. Touchdowns.','Knocking on the door.','Do not settle for three.','Inside the 20. Pound it.','Give it to {rb} three times.','This has to be seven.'],
+ 'rz.def':['Red zone stand. Come on, defense.','Hold them to three.','Backs against the wall.','Bow up. Right here.','Make them kick.','Tighten up down here.','Field shrinks. Cover somebody.','Goal line stand would be huge.'],
+ 'backed.off':['Backed up deep. Be careful with it.','Just get some breathing room.','No mistakes down here.','Bad field position. Need a first down or two.','Do not throw it over the middle here.','Shadow of our own goal post.'],
+ 'drive':['{n} plays on this drive. Keep going.','Long drive. Wearing them down.','This is a good looking drive.','{n} plays and counting. Eat that clock.','Their defense has its hands on its hips.','We are marching.'],
+ 'twomin':['Two minute drill. Here we go.','Clock is the enemy now.','Manage the clock, Coach.','Use the sideline.','Plenty of time. Do not rush.','Hurry up! Get to the line!','This is where you earn it.','Watch the clock. Watch the clock.'],
+ 'lg':['{la} up {ls} on {lb} right now.','Anybody else keeping an eye on {la} and {lb}? {ls}.','Score check: {la} {lh}, {lb} {ll}.','{la} leading {lb} {ls}. Interesting.','{lb} is down {lm} to {la}. Did not see that coming.','Ticker says {la} {lh}, {lb} {ll}.','{la} and {lb} is a good one. {ls}.','Flipped over during the break. {la} is up {lm} on {lb}.','{la} {ls} over {lb}. That one matters for us.','My buddy is at the {la} game. {ls} over {lb}.','{lb} trailing {la} by {lm}. Keep an eye on that.','{la} {lh}, {lb} {ll}. This league is wild.'],
+ 'lgt':['{la} and {lb} are tied at {lh}.','All even at {lh} between {la} and {lb}.','{la} and {lb} knotted at {lh}. Good one over there.'],
+ 'lgup':['UPSET ALERT: {la} is beating {lb} {ls}.','Um, {la} is up on {lb}. {ls}.','{lb} is in trouble. {la} leads {ls}.','Chaos brewing. {la} {lh}, {lb} {ll}.','If {la} holds on against {lb} the poll is going to look different.','{lb} down {lm} to {la}. The league is upside down today.'],
+ 'lgf':['Final: {la} {lh}, {lb} {ll}.','{la} beat {lb} {ls}. That is a final.','{la} over {lb}, {ls}. Put it in the books.','It is over in the other game. {la} {lh}, {lb} {ll}.'],
+ 'pre':['Here we go. Been waiting all week.','Good luck today, {m}.','Kickoff cannot come soon enough.','Let us go, {t}!','Seats are filling up. Great crowd.','Prediction: {m} by ten.','Nervous. Good nervous.','Anybody else skip lunch for this?','Warmups looked sharp.','Beat {o}.','Coin toss time. Let us play some football.','Morning, everybody. {m} all day.','I have a good feeling about this one.','Checking in from {city}.'],
+ 'q1':['One quarter down.','Feeling each other out so far.','Fast first quarter.','{us}-{th} after one. Long way to go.','Good start. Keep it up.','Slow start. We will be fine.','Settle in. Three more of these.'],
+ 'half.w':['Up {lead} at the half. Finish the job.','Good half. Now do it again.','{us}-{th} at the break. I will take it.','Halftime. Do not change a thing.','Solid thirty minutes. Stay locked in.','Up at half. No letting up.','Halftime lead. The second half is where it counts.'],
+ 'half.l':['Down {lead} at the half. Need adjustments.','Halftime cannot come soon enough.','{th}-{us} at the break. Regroup.','Coach {coach} better have a speech ready.','Not our best half. Plenty of time.','We get the second half to fix it.','Somebody light a fire in that locker room.'],
+ 'half.t':['Tied at the half. Buckle up.','{us} all at the break. Coin flip game.','Even through two quarters. Second half decides it.','Halftime and nothing is settled.'],
+ 'half.x':['Halftime. Snack run.','Band is taking the field.','Halftime. Stretch your legs, folks.','Line for the restroom is forty deep. See you in the fourth.','Halftime show time. Go band.','Refilling the sweet tea.','Who is up for halftime predictions?','Checking the other scores at the break.'],
+ 'q3':['Fourth quarter coming up. This is it.','Fifteen minutes to go.','{us}-{th} heading to the fourth.','Fourth quarter. Who is in better shape?','One quarter left. Leave it all out there.','Finish strong.','Everything to play for in the fourth.'],
+ 'ot':['OVERTIME. I cannot breathe.','Free football!','Overtime. Of course it is.','Going to extra time. Somebody hold me.','Nobody deserves to lose this one. But I hope they do.','Overtime in {city}. What a game.','My heart was not built for overtime.','Score a touchdown. Do not settle.'],
+ 'final.w':['BALLGAME. {m} WIN.','That is a FINAL. {us}-{th}.','What a win. What a team.','Victory formation is the prettiest play in football.','{t} wins! See everybody at church tomorrow, with a smile.','Sing the fight song!','Great team win.','Coach {coach} gets a game ball.','Happy ride home.','We are {us}-{th} winners and I am losing my voice.','One game at a time. Today was a good one.','How about them {m}.','Drive home safe, everybody. Big win.','Hang that score on the fridge.','Worth every penny of the ticket.','That locker room is going to be loud.'],
+ 'final.l':['Tough one. Proud of the fight.','That is the game. {th}-{us}.','On to next week.','Hurts. No way around it.','We had our chances.','Credit to {o}. They earned it.','Long week ahead.','Not good enough today.','Heads up, {m}. Get back to work Monday.','Going to need a minute.','I will be back next week. I always come back.','Lot to clean up on film.','Turn the page.','That one is going to linger.','Still love this team. Even today.'],
+ 'final.close':['What a football game.','Instant classic.','I aged ten years.','Nobody is forgetting that one.','That was everything college football is supposed to be.'],
+ 'sr':['Senior Day. Thank you, seniors.','Lot of good memories with this senior class.','Not crying. Just allergies.'],
+ 'wait':['Hang on, what did I miss?','Stream jumped ahead on me. What happened?','I looked down for one second.','Wait, the score is what now?','Went to refill my drink and everything changed.','Somebody catch me up.']
+};
+const FC_MAX=80;
+function fcNew(){
+  const mk=id=>{const out=[],seen={};let i=0;while(out.length<12&&i++<80){const h=handle(id,'fan');if(seen[h])continue;seen[h]=1;out.push({h,v:/^Student|4Life$|Nation$/.test(h)?'low':/^OldGrad|^SeasonTickets|^BandParent|Mom\d|Dad\d/.test(h)?'std':pick(['std','std','std','low','low','caps'])})}return out};
+  return {gid:G.gid,season:S.season,ln:G.ln||0,msgs:[],qu:[],bag:{},said:{},t:0,qt:0,amb:2.5,ambN:0,id:0,unread:0,fans:{u:mk(teamOf('u').id),c:mk(teamOf('c').id)},lastF:{},ps:{u:G.su,c:G.sc},def:{u:0,c:0},tkc:0,n:0};
+}
+function fcState(){
+  if(!G||!S)return null;let F=SC.fc;
+  if(!F||F.gid!==G.gid||F.season!==S.season||F.wk!==S.week){F=SC.fc=fcNew();F.wk=S.week;
+    if(G.phase==='coin'){fcSys('Chat is open. Kickoff is coming up.');for(const s of shuffle(['u','c','u','c']))fcSay(s,'pre',{},1)}
+    else fcSys('Back to the game. '+abbrOf('u')+' '+G.su+', '+abbrOf('c')+' '+G.sc+'.')}
+  return F;
+}
+function fcLast(n){return n?String(n).split(' ').pop():null}
+function fcV(s,e){
+  const T=teamOf(s),O=teamOf(other(s)),my=s==='u'?G.su:G.sc,th=s==='u'?G.sc:G.su,g=S.games[G.gid],rv=g&&g.riv!=null&&S.rivals[g.riv];
+  const cn=T.id===S.userId?S.coach:T.coach&&T.coach.name;
+  return Object.assign({t:T.abbr,o:O.abbr,m:T.mascot,om:O.mascot,us:my,th,lead:Math.abs(my-th),coach:fcLast(cn),qb:fcLast(nmS(s,'QB')),rb:fcLast(nmS(s,'RB')),wr:fcLast(nmS(s,'X')),trophy:rv&&rv.trophy?troN(rv).replace(/^the /i,''):null,city:(T.city||'').split(',')[0]||null},e||{});
+}
+function fcLine(key,v){
+  const F=SC.fc,pool=FCT[key];if(!pool)return null;
+  for(let i=0;i<10;i++){let bag=F.bag[key];if(!bag||!bag.length)bag=F.bag[key]=shuffle(pool.map((_,j)=>j));
+    let ok=true;const tx=pool[bag.pop()].replace(/\{(\w+)\}/g,(m,k)=>{if(v[k]==null||v[k]===''){ok=false;return ''}return v[k]});
+    if(ok&&(!F.said[tx]||i>=9))return tx}
+  return null;
+}
+function fcVoice(tx,v){
+  if(v==='low')return tx.toLowerCase().replace(/\.$/,'');
+  if(v==='caps'&&tx.length<46)return tx.toUpperCase().replace(/\.$/,R()<.5?'!':'');
+  return tx;
+}
+function fcFan(s){const F=SC.fc,L=F.fans[s];let f=L[Math.floor(Math.pow(R(),1.5)*L.length)];if(f===F.lastF[s])f=L[(L.indexOf(f)+1+Math.floor(R()*3))%L.length];F.lastF[s]=f;return f}
+function fcQ(m,gap,pr){
+  const F=SC.fc;F.qt=Math.min(Math.max(F.qt,F.t)+gap/(1+F.qu.length/5),F.t+9);m.at=F.qt;m.pr=pr||1;m.id=++F.id;F.qu.push(m);
+  if(F.qu.length>16){let j=0;for(let i=1;i<F.qu.length;i++)if(F.qu[i].pr<F.qu[j].pr)j=i;F.qu.splice(j,1)}
+}
+function fcSys(tx,hot){fcQ({s:'n',tx,hot:!!hot},.15,9)}
+/* one fan line. key is a bucket in FCT; e carries slots for this event */
+function fcSay(s,key,e,pr,raw){
+  const F=SC.fc,f=fcFan(s),v=fcV(s,e);let tx=raw||fcLine(key,v);if(!tx)return false;
+  F.said[tx]=1;tx=fcVoice(tx,f.v);F.n++;
+  fcQ({s,h:f.h,tx,k:key},pr>=4?rnd(.25,.8):rnd(.5,1.5),pr||1);return true;
+}
+function fcMany(s,keys,n,e,pr){for(let i=0;i<n;i++){const k=Array.isArray(keys)?pick(keys):keys;if(R()<.14&&pr>=3){const w=/\.g$|W$/.test(k)?FC_YAY:/\.b$|L$/.test(k)?FC_OOF:null;if(w){fcSay(s,k,e,pr,pick(w));continue}}fcSay(s,k,e,pr)}}
+function fcSideOf(ab){return ab===abbrOf('u')?'u':ab===abbrOf('c')?'c':null}
+function fcNameSide(t){for(const s of ['u','c']){const ro=G.ros&&G.ros[s];for(const k in ro)if(ro[k]&&ro[k].name&&t.startsWith(ro[k].name))return s}return G.last?G.last.side:null}
+const FC_NM=/[A-Z]\. [A-Z][A-Za-z'\-]+/g;
+function fcClass(t,k){
+  let m;const nm=t.match(FC_NM)||[],L=x=>fcLast(x);
+  if((m=/^TOUCHDOWN (\S+?)\./.exec(t)))return {k:'td',s:fcSideOf(m[1]),pr:5};
+  if(/^FINAL elsewhere/.test(t))return {k:'lgfin',pr:2,raw:t.replace(/^FINAL elsewhere: /,'')};
+  if(/^FINAL:/.test(t))return {k:'final',pr:6};
+  if(t==='Halftime.')return {k:'half',pr:4};
+  if(/^End of the (\w+) quarter/.test(t))return {k:'qend',pr:3};
+  if(/Tied after regulation/.test(t))return {k:'ot',pr:5};
+  if(/INTERCEPTED by|picked off by/.test(t)){const o=fcNameSide(t);return o?{k:'int',s:other(o),p:L(nm[1]),pr:5,six:/distance/.test(t)}:null}
+  if(/FUMBLES|strip-sacked/.test(t)){m=/(\S+) recovers|and (\S+) scoops/.exec(t);const s=m&&fcSideOf(m[1]||m[2]);return s?{k:'fum',s,pr:5,six:/SCORES/.test(t)}:null}
+  if((m=/^SAFETY\. 2 points for (\S+?)\./.exec(t)))return {k:'safety',s:fcSideOf(m[1]),pr:5};
+  if((m=/^(\S+) (\d+)-yard field goal is (GOOD|NO GOOD)(?:, wide (\w+))?/.exec(t))){const s=fcSideOf(m[1]);return s?(m[3]==='GOOD'?{k:'fg',s,y:m[2],pr:4}:{k:'fgmiss',s:other(s),y:m[2],n:m[4]||'right',pr:4}):null}
+  if(/^Extra point is NO GOOD/.test(t))return G.last&&G.last.pk==='xp'?{k:'patmiss',s:other(G.last.side),pr:3}:null;
+  if((m=/^(\S+) two-point try (is GOOD|fails)/.exec(t))){const s=fcSideOf(m[1]);return s?{k:m[2]==='fails'?'twofail':'two',s:m[2]==='fails'?other(s):s,pr:4}:null}
+  if(/onside kick/.test(t)){const s=fcSideOf(t.split(' ')[0]);if(!s)return null;return /RECOVERS/.test(t)?{k:'onrec',s,pr:5}:{k:'onfail',s:other(s),pr:3}}
+  if(/returns the kickoff ALL THE WAY|takes the punt back ALL THE WAY/.test(t))return {k:'krtd',s:fcSideOf(t.split(' ')[0]),pr:5};
+  if((m=/^(\S+) punts/.exec(t))){const s=fcSideOf(m[1]);return s?{k:/big return/.test(t)?'puntret':'punt',s:other(s),pr:1}:null}
+  if((m=/^(\S+) calls timeout/.exec(t)))return {k:'to',s:fcSideOf(m[1]),pr:1};
+  if(/^Rain coming|^Snow falling|^Wind swirling/.test(t))return {k:'wx',pr:2};
+  if(/^Senior Day/.test(t))return {k:'sr',pr:2};
+  if(k==='k')return null;
+  const o=fcNameSide(t);if(!o)return null;
+  if(/Turnover on downs/.test(t))return {k:'stop4',s:other(o),pr:5};
+  if((m=/sacked by (.+?) for a loss/.exec(t)))return {k:'sack',s:other(o),p:L(m[1]),pr:3};
+  if((m=/ for (\d+) yards!/.exec(t)))return {k:'big',s:o,y:+m[1],p:L(/hits/.test(t)?nm[1]:nm[0]),pr:3};
+  if(/stuffed at the line|dropped for a loss/.test(t))return {k:'stuff',s:other(o),p:L(nm[0]),pr:1};
+  if(/incomplete|throws it away/.test(t))return {k:'inc',s:o,pr:1};
+  if(/takes a knee|spikes it/.test(t))return null;
+  if(/First down\.$/.test(t))return {k:'fd',s:o,p:L(/finds|hits/.test(t)?nm[1]:nm[0]),pr:1};
+  return {k:'play',s:o,p:L(/finds/.test(t)?nm[1]:nm[0]),pr:1};
+}
+function fcCtx(){
+  const g=S.games[G.gid]||{},d=G.su-G.sc,late=!G.ot&&G.q===4&&G.clock<G.qlen*.6;
+  const dog=Math.abs(G.line||0)>=6?(G.line>0?'c':'u'):(G.rk&&G.rk.u<=PN&&G.rk.c>PN+6?'c':G.rk&&G.rk.c<=PN&&G.rk.u>PN+6?'u':null);
+  return {g,d,late,dog,riv:g.riv!=null,dogUp:!!dog&&(dog==='u'?d>0:d<0),sp:Math.round(Math.abs(G.line||0))||null};
+}
+/* score-state reaction after any change on the board */
+function fcBoard(s,lite){
+  const F=SC.fc,o=other(s),my=s==='u'?G.su:G.sc,th=s==='u'?G.sc:G.su,pm=F.ps[s],pt=F.ps[o],d=my-th,pd=pm-pt,X=fcCtx();
+  F.def[o]=Math.max(F.def[o],d);F.def[s]=Math.max(F.def[s],-pd);
+  if(d===0){fcSay(pick(['u','c']),'tied',{},3);if(!lite)fcSay(o,'tied',{},2)}
+  else if(pd<=0&&d>0){fcMany(s,'flip.g',lite?1:2,{},4);fcSay(o,'flip.b',{},3)}
+  else if(d>=21&&pd<21){fcMany(s,'blowW',2,{},3);fcMany(o,'blowL',2,{},3)}
+  else if(d<0&&d>=-8&&F.def[s]>=14){fcMany(s,'rally.g',lite?1:2,{},4);fcSay(o,'rally.b',{},3)}
+  else if(!lite&&R()<.5)fcSay(s,d>=21?'blowW':d>0?'lead':'trail',{},2);
+  if(!lite&&X.dog&&X.dogUp&&G.q>=3&&R()<.6){fcSay(X.dog,'upset.dog',{n:X.sp},3);fcSay(other(X.dog),'upset.fav',{n:X.sp},3)}
+}
+function fcReact(e,lite){
+  const s=e.s,o=s&&other(s),n=(a,b)=>lite?1:ri(a,b),A=s&&abbrOf(s),sc=lite?'':' · '+abbrOf('u')+' '+G.su+', '+abbrOf('c')+' '+G.sc;
+  switch(e.k){
+    case 'td':{fcSys('TOUCHDOWN '+A,true);const c=n(3,5);for(let i=0;i<c;i++){const r=R(),sh=fcLine2(FC_SHOUT,fcV(s,e)),long=e.y>=25&&R()<.6;
+        if(r<.22)fcSay(s,'td.g',e,5,sh+'!');else if(r<.5){const b=fcLine(long?'tdlong.g':'td.g',fcV(s,e));if(b)fcSay(s,'td.g',e,5,sh+'! '+b)}else fcSay(s,long?'tdlong.g':'td.g',e,5)}
+      fcMany(o,'td.b',n(2,3),e,4);if(!lite&&R()<.3)fcSay(o,'ref',e,2);break}
+    case 'krtd':fcMany(s,'krtd.g',n(2,3),e,5);fcMany(o,'krtd.b',n(1,2),e,4);break;
+    case 'fg':fcSys('FIELD GOAL '+A+sc);fcMany(s,'fg.g',n(1,2),e,3);if(lite||R()<.7)fcSay(o,'fg.b',e,2);fcBoard(s,lite);break;
+    case 'fgmiss':fcSys('Field goal no good');fcMany(s,'fgmiss.g',n(1,2),e,3);fcMany(o,'fgmiss.b',n(1,2),e,3);break;
+    case 'patmiss':fcSay(o,'patmiss.b',e,3);fcSay(s,'patmiss.g',e,3);break;
+    case 'int':fcSys('INTERCEPTION · '+A+' ball',true);fcMany(s,'int.g',n(2,3),e,5);fcMany(o,'int.b',n(2,3),e,4);if(!lite&&R()<.3)fcSay(o,'ref',e,2);break;
+    case 'fum':fcSys('FUMBLE · '+A+' recovers',true);fcMany(s,'fum.g',n(2,3),e,5);fcMany(o,'fum.b',n(2,3),e,4);if(!lite&&R()<.35)fcSay(o,'ref',e,2);break;
+    case 'safety':fcSys('SAFETY · 2 points '+A+sc,true);fcMany(s,'safety.g',n(1,2),e,5);fcMany(o,'safety.b',n(1,2),e,4);fcBoard(s,lite);break;
+    case 'two':fcMany(s,'two.g',1,e,4);fcSay(o,'two.b',e,3);fcBoard(s,true);break;
+    case 'twofail':fcMany(s,'twofail.g',1,e,4);fcSay(o,'twofail.b',e,3);break;
+    case 'onrec':fcSys('ONSIDE KICK RECOVERED · '+A,true);fcMany(s,'onrec.g',n(2,3),e,5);fcMany(o,'onrec.b',n(1,2),e,4);break;
+    case 'onfail':fcSay(s,'onfail.g',e,3);fcSay(o,'onfail.b',e,3);break;
+    case 'stop4':fcSys('Turnover on downs · '+A+' ball');fcMany(s,'stop4.g',n(2,3),e,5);fcMany(o,'stop4.b',n(1,2),e,4);if(!lite&&R()<.3)fcSay(o,'ref',e,2);break;
+    case 'sack':fcSay(s,'sack.g',e,3);if(R()<.55)fcSay(o,'sack.b',e,2);if(R()<.12)fcSay(o,'ref',e,1);break;
+    case 'big':fcMany(s,'big.g',n(1,2),e,3);if(R()<.6)fcSay(o,'big.b',e,2);break;
+    case 'stuff':if(R()<.3)fcSay(s,'stuff.g',e,1);break;
+    case 'punt':if(R()<.4)fcSay(R()<.55?s:o,R()<.55?'punt.g':'punt.b',e,1);break;
+    case 'puntret':fcSay(s,'puntret.g',e,2);break;
+    case 'to':if(R()<.3)fcSay(pick(['u','c']),'to',e,1);break;
+    case 'fd':if(R()<.2)fcSay(s,'fd',e,1);break;
+    case 'inc':if(R()<.2)fcSay(R()<.75?s:o,'inc',e,1);else if(R()<.06)fcSay(s,'ref',e,1);break;
+    case 'play':if(R()<.14)fcSay(s,'play',e,1);break;
+    case 'wx':{const w=envG().weather;if(FCT[w]){fcSay('u',w,e,2);fcSay('c',w,e,2)}break}
+    case 'sr':fcSay(homeSide(),'sr',e,2);break;
+    case 'lgfin':fcSys('Final elsewhere: '+e.raw);break;
+    case 'qend':{const q1=G.q<=2;fcSys('End of the '+(q1?'1st':'3rd')+' quarter'+sc);for(const x of ['u','c'])fcSay(x,q1?'q1':'q3',e,3);break}
+    case 'half':{fcSys('HALFTIME'+sc,true);for(const x of ['u','c']){const d=x==='u'?G.su-G.sc:G.sc-G.su;fcMany(x,d>0?'half.w':d<0?'half.l':'half.t',lite?1:2,e,3)}if(!lite)fcMany(pick(['u','c']),'half.x',2,e,2);break}
+    case 'ot':fcSys('OVERTIME',true);fcMany('u','ot',n(1,2),e,5);fcMany('c','ot',n(1,2),e,5);break;
+    case 'final':{const w=G.su>G.sc?'u':'c',cl=Math.abs(G.su-G.sc)<=7;fcSys('FINAL · '+abbrOf('u')+' '+G.su+', '+abbrOf('c')+' '+G.sc,true);fcMany(w,'final.w',3,e,6);fcMany(other(w),'final.l',3,e,6);if(cl){fcSay(w,'final.close',e,5);fcSay(other(w),'final.close',e,5)}break}
+  }
+}
+function fcLine2(pool,v){for(let i=0;i<6;i++){let ok=true;const tx=pick(pool).replace(/\{(\w+)\}/g,(m,k)=>{if(v[k]==null){ok=false;return ''}return v[k]});if(ok)return tx}return 'YES'}
+/* read whatever the play-by-play log gained since last time and turn it into reactions */
+function fcSync(){
+  const F=fcState();if(!F)return;const ln=G.ln||0,n=ln-F.ln;if(n<=0){F.ln=ln;return}F.ln=ln;F.ambN=0;
+  const ents=G.log.slice(0,Math.min(n,G.log.length)).reverse(),bulk=n>9;let evs=[];
+  for(let i=0;i<ents.length;i++){let e=null;try{e=fcClass(ents[i].t,ents[i].k)}catch(x){}if(!e)continue;
+    if(e.k==='td'){const pv=evs[evs.length-1];if(pv&&pv.i===i-1&&['big','play','fd','krtd'].includes(pv.k)){evs.pop();if(pv.k==='krtd'){e.k='krtd'}else if(pv.s===e.s){e.p=pv.p;e.y=pv.y}}}
+    e.i=i;evs.push(e)}
+  if(bulk){evs=evs.filter(e=>e.pr>=4).slice(-4);F.qu=F.qu.filter(m=>m.pr>=5);if(R()<.5)fcSay(pick(['u','c']),'wait',{},4)}
+  let scored=null;for(const e of evs){try{fcReact(e,bulk)}catch(x){}if(e.k==='td'||e.k==='krtd')scored=e.s}
+  if(scored&&(G.su!==F.ps.u||G.sc!==F.ps.c))fcBoard(scored,bulk);
+  F.ps={u:G.su,c:G.sc};
+}
+/* the trickle between plays: situation, score state, the rest of the league, the weather, the snack line */
+function fcAmb(){
+  const F=SC.fc,X=fcCtx(),E=envG(),s=pick(['u','c']),o=other(s),d=s==='u'?X.d:-X.d,ph=G.phase;
+  if(ph==='coin')return fcSay(s,'pre',{},1);
+  if(ph==='half')return fcSay(s,R()<.6?'half.x':d>0?'half.w':d<0?'half.l':'half.t',{},1);
+  const T=S.week<12&&R()<.9?(()=>{try{return tickItems()}catch(e){return null}})():null,live=ph==='off'||ph==='def',off=G.poss,toGoal=100-G.ball;
+  const w={situ:live?4:0,state:3,lg:T&&T.items&&T.items.length?2.6:0,riv:X.riv?2.4:0,rank:G.rk&&(G.rk.u<=PN||G.rk.c<=PN)?1.2:0,upset:X.dog&&X.dogUp&&G.q>=2?2.4:0,wx:FCT[E.weather]&&!E.dome?1.1:0,night:E.night?.5:0,life:3,coach:1,star:1.2,ref:.9,mom:Math.abs(G.mom||0)>40?1.6:0};
+  const k=wpick(w);
+  switch(k){
+    case 'situ':{const me=R()<.5?off:other(off),mine=me===off;
+      if(!G.ot&&(G.q===2||G.q===4)&&G.clock<=Math.max(60,G.qlen*.14)&&Math.abs(X.d)<=16&&R()<.6)return fcSay(me,'twomin',{},1);
+      if(G.down===4)return fcSay(me,'s4',{n:G.togo},2);
+      if(G.down===3)return fcSay(me,mine?'s3.off':'s3.def',{n:G.togo},2);
+      if(toGoal<=20)return fcSay(me,mine?'rz.off':'rz.def',{},2);
+      if(G.ball<=12&&mine)return fcSay(me,'backed.off',{},1);
+      if(G.drive&&G.drive.n>=7&&mine)return fcSay(me,'drive',{n:G.drive.n},1);
+      return fcSay(me,mine?'play':'life',{p:fcLast(nmS(me,'RB'))},1)}
+    case 'state':return fcSay(s,X.late&&Math.abs(d)<=8?'close':d>=21?'blowW':d<=-21?'blowL':d>0?'lead':d<0?'trail':'tied',{},1);
+    case 'lg':{const it=T.items.slice(0,7),x=pick(it),st=x.st,hw=st.h>=st.a,la=team(hw?x.g.h:x.g.a).abbr,lb=team(hw?x.g.a:x.g.h).abbr,lh=Math.max(st.h,st.a),ll=Math.min(st.h,st.a);
+      if(lh+ll===0)return fcSay(s,'life',{},1);
+      return fcSay(s,st.fin?'lgf':lh===ll?'lgt':(x.alert||x.upset)?'lgup':'lg',{la,lb,lh,ll,ls:lh+'-'+ll,lm:lh-ll},2)}
+    case 'riv':return fcSay(s,'riv',{},2);
+    case 'rank':{const r=G.rk[s],ro=G.rk[o];return r<=PN?fcSay(s,'rank',{n:r<=5?5:r<=10?10:PN},1):ro<=PN?fcSay(s,'unrank',{},1):false}
+    case 'upset':return fcSay(s,s===X.dog?'upset.dog':'upset.fav',{n:X.sp},2);
+    case 'wx':return fcSay(s,E.weather,{},1);
+    case 'night':return fcSay(s,'night',{},1);
+    case 'coach':return fcSay(s,'coach',{},1);
+    case 'star':return fcSay(s,'star',{},1);
+    case 'ref':return fcSay(s,'ref',{},1);
+    case 'mom':{const up=(G.mom>0)===(s==='u');return fcSay(s,up?'mom.g':'mom.b',{},1)}
+    default:return fcSay(s,'life',{},1);
+  }
+}
+function fcHTML(m){
+  if(m.s==='n')return '<div class="fc-m fc-sys'+(m.hot?' hot':'')+'"><span>'+esc(m.tx)+'</span></div>';
+  const T=teamOf(m.s);return '<div class="fc-m"><span class="fc-tag" style="--tc:'+wxCol(T)+'"><i></i>'+esc(T.abbr)+'</span><b class="fc-h">@'+esc(m.h)+'</b> <span class="fc-t">'+esc(m.tx)+'</span></div>';
+}
+function fcPill(on){const p=document.getElementById('fc-new');if(p&&p._on!==on){p._on=on;if(p.classList)p.classList[on?'add':'remove']('on')}}
+function fcMount(pane){
+  const F=fcState();if(!F)return;F.unread=0;
+  pane.innerHTML='<div class="fc-wrap"><div class="fc-list" id="fc-list" role="log" aria-live="off" aria-label="Fan chat">'+F.msgs.map(fcHTML).join('')+'</div><button class="fc-new" id="fc-new" data-act="fcbot">New messages &#8595;</button><div class="fc-foot"><span><i class="fc-d" style="background:'+wxCol(teamOf('u'))+'"></i>'+esc(teamOf('u').abbr)+' fans</span><span><i class="fc-d" style="background:'+wxCol(teamOf('c'))+'"></i>'+esc(teamOf('c').abbr)+' fans</span></div></div>';
+  const el=document.getElementById('fc-list');if(el&&el.addEventListener){el.scrollTop=el.scrollHeight;el.addEventListener('scroll',()=>{if(el.scrollHeight-el.scrollTop-el.clientHeight<36)fcPill(false)},{passive:true})}
+}
+function fcPush(m){
+  const F=SC.fc;F.msgs.push(m);if(F.msgs.length>FC_MAX)F.msgs.splice(0,F.msgs.length-FC_MAX);
+  if(typeof document.getElementById!=='function')return;
+  const el=wxTab()==='chat'?document.getElementById('fc-list'):null;
+  if(!el||typeof el.insertAdjacentHTML!=='function'){if(wxTab()!=='chat'&&m.s!=='n'){F.unread++;if(F.unread===1)wxTabsRefresh()}return}
+  const stick=el.scrollHeight-el.scrollTop-el.clientHeight<36;
+  el.insertAdjacentHTML('beforeend',fcHTML(m));while(el.children.length>FC_MAX)el.removeChild(el.firstChild);
+  if(stick)el.scrollTop=el.scrollHeight;else fcPill(true);
+}
+/* deliver everything waiting right now (used by the test harness and when the tab was asleep) */
+function fcFlush(){const F=SC.fc;if(!F)return 0;let n=0;while(F.qu.length){fcPush(F.qu.shift());n++}F.qt=F.t;return n}
+
+/* ---------- halftime report ---------- */
+function htSnap(){if(!G)return;const B=G.box,c=o=>({yds:o.yds,pass:o.pass,rush:o.rush,fd:o.fd,to:o.to});G.hs={su:G.su,sc:G.sc,box:{u:c(B.u),c:c(B.c)},st:{qb:{...G.st.qb},rb:{...G.st.rb},wr:{...G.st.wr}},pl:{u:(G.calls||[]).filter(x=>x.side==='u').length,c:(G.calls||[]).filter(x=>x.side==='c').length}}}
+function htGames(){
+  if(!G||S.week>=12)return [];const p=poll(),uid=S.userId,ut=team(uid);
+  return S.games.filter(g=>g.pre&&g.wk===S.week&&S.games.indexOf(g)!==G.gid&&!g.done).map(g=>{
+    const st=tickState(g,.5),hr=rankOf(g.h,p),ar=rankOf(g.a,p),fav=(g.pl||0)>=0?g.h:g.a,dog=fav===g.h?g.a:g.h,fs=fav===g.h?st.h:st.a,ds=fav===g.h?st.a:st.h,H=team(g.h),A=team(g.a);
+    const x={g,st,hr,ar,fav,dog,fr:rankOf(fav,p),dr:rankOf(dog,p),fs,ds,best:Math.min(hr,ar),both:hr<=PN&&ar<=PN,dogUp:ds>fs,mar:Math.abs(st.h-st.a),riv:g.riv!=null,line:Math.abs(g.pl||0),
+      conf:ut&&(H.conf===ut.conf||A.conf===ut.conf),div:ut&&ut.div!=null&&((H.conf===ut.conf&&H.div===ut.div)||(A.conf===ut.conf&&A.div===ut.div))};
+    x.alert=x.dogUp&&(x.fr<=PN||x.line>=7);x.pr=(x.alert?(x.fr<=PN?90:40):0)+(x.best<=PN?(PN+1-x.best)*6:0)+(x.both?40:0)+(x.mar<=7?12:0)+(x.riv?14:0)+(x.div?10:0);return x});
+}
+function htRow(x,note){
+  const st=x.st,g=x.g,r=(id,rk,pts,ld)=>'<div class="ht-tm'+(ld?' ld':'')+'">'+mlogo(team(id))+'<span>'+(rk<=PN?'<small>'+rk+'</small>':'')+esc(team(id).name)+'</span><b class="num">'+pts+'</b></div>';
+  const tag=x.alert&&x.fr<=PN?'<em class="ht-tag up">Upset alert</em>':x.both?'<em class="ht-tag">Top '+PN+' clash</em>':x.riv?'<em class="ht-tag">Rivalry</em>':x.alert?'<em class="ht-tag up">Underdog leads</em>':x.div?'<em class="ht-tag">Division</em>':'';
+  return '<div class="ht-g'+(x.alert?' up':'')+'"><div class="ht-gs">'+r(g.a,x.ar,st.a,st.a>st.h)+r(g.h,x.hr,st.h,st.h>st.a)+'</div><div class="ht-gm"><span>Half</span>'+tag+'</div>'+(note?'<p class="ht-note">'+note+'</p>':'')+'</div>';
+}
+/* one line on what a halftime score would mean if it stands */
+function htNote(x){
+  const F=team(x.fav),D=team(x.dog),u=S.userId,ur=rankOf(u),U=team(u),rv=x.riv&&S.rivals[x.g.riv],lead=x.st.h>x.st.a?team(x.g.h):x.st.a>x.st.h?team(x.g.a):null,W=lead&&lead.id===x.g.h?x.hr:x.ar;
+  if(x.dogUp&&x.fr<=PN){const nx=x.fav!==u&&x.dog!==u&&ur>x.fr&&ur-x.fr<=5?' '+esc(U.abbr)+' sits right behind at No. '+ur+'.':'';
+    return (x.fr<=4?'A loss would knock No. '+x.fr+' '+esc(F.abbr)+' out of a first-round bye.':x.fr<=12?'A loss puts No. '+x.fr+' '+esc(F.abbr)+' on the wrong side of the playoff line.':'No. '+x.fr+' '+esc(F.abbr)+' likely falls out of the poll with a loss.')+nx}
+  if(x.both)return lead?'Hold on and No. '+W+' '+esc(lead.abbr)+' owns the best win of the week.':'Dead even between two ranked teams. The loser slides.';
+  if(rv&&rv.trophy)return 'The '+esc(troN(rv).replace(/^the /i,''))+' is on the line'+(lead?(rv.holder===lead.id?' and '+esc(lead.abbr)+' is keeping it so far.':' and it would change hands.'):'.');
+  if(x.dogUp&&x.line>=7)return esc(D.abbr)+' came in as a '+Math.round(x.line)+'-point underdog.';
+  if(x.best<=PN&&lead){const R1=x.hr<=PN?team(x.g.h):team(x.g.a),rr=Math.min(x.hr,x.ar);return lead.id===R1.id?(x.mar>=14?'No. '+rr+' '+esc(R1.abbr)+' is in control.':'No. '+rr+' '+esc(R1.abbr)+' has work left to do.'):''}
+  return '';
+}
+function htDivLine(c){
+  try{const u=S.userId,U=team(u),p=poll(),ids=S.teams.filter(t=>t.conf===U.conf&&(U.div==null||t.div===U.div)).map(t=>t.id),ord2=confOrder(ids.slice(),p),ld=ord2[0],nm=U.div!=null&&DIVS&&DIVS[U.conf]?DIVS[U.conf][U.div]+' division':CONFS[U.conf];
+    const f=id=>c.find(x=>x.g.h===id||x.g.a===id),st=id=>{const x=f(id);if(!x)return null;const my=x.g.h===id?x.st.h:x.st.a,th=x.g.h===id?x.st.a:x.st.h;return {x,my,th,opp:team(x.g.h===id?x.g.a:x.g.h)}};
+    if(ld===u){const ch=ord2[1],s2=ch!=null&&st(ch);return s2?'You lead the '+esc(nm)+'. '+esc(team(ch).abbr)+', the closest chaser, is '+(s2.my>s2.th?'up '+(s2.my-s2.th):s2.my<s2.th?'down '+(s2.th-s2.my):'tied')+' at the half.':'You lead the '+esc(nm)+'.'}
+    const s1=st(ld),L=team(ld),r1=rec(ld),ru=rec(u);if(!s1)return esc(L.abbr)+' leads the '+esc(nm)+' at '+r1.cw+'-'+r1.cl+' in league play.';
+    if(s1.my<s1.th)return esc(nm).replace(/^./,ch=>ch.toUpperCase())+' leader '+esc(L.abbr)+' trails '+esc(s1.opp.abbr)+' by '+(s1.th-s1.my)+'. '+(ru.cl<=r1.cl+1?'That opens the door for '+esc(U.abbr)+'.':'The race tightens if that holds.');
+    return esc(L.abbr)+' ('+r1.cw+'-'+r1.cl+') leads the '+esc(nm)+' and is '+(s1.my>s1.th?'up '+(s1.my-s1.th)+' on ':'tied with ')+esc(s1.opp.abbr)+'.';
+  }catch(e){return ''}
+}
+function htCards(){
+  const u=teamOf('u'),c=teamOf('c'),H=G.hs||(G.phase==='half'?{su:G.su,sc:G.sc,box:G.box,st:G.st}:null),gs=htGames(),cards=[],g=S.games[G.gid]||{},mine=!G.watch||G.mine,[sl,sr]=wxSides(),TL=teamOf(sl),TR=teamOf(sr),pt=s=>s==='u'?H.su:H.sc;
+  const hd=H?'<div class="ht-score"><div style="--tc:'+wxCol(TL)+'">'+mlogo(TL)+'<span>'+esc(TL.abbr)+'</span><b class="num">'+pt(sl)+'</b></div><i>Half</i><div style="--tc:'+wxCol(TR)+'"><b class="num">'+pt(sr)+'</b><span>'+esc(TR.abbr)+'</span>'+mlogo(TR)+'</div></div>':'';
+  if(H){const B=H.box,row=(n,x,y,inv)=>{const t=(+x||0)+(+y||0);return '<div class="ht-sr"><b class="num'+(t&&(inv?x<y:x>y)?' ld':'')+'">'+x+'</b><span>'+n+'</span><b class="num'+(t&&(inv?y<x:y>x)?' ld':'')+'">'+y+'</b></div>'};
+    const qp=G.qp?'<p class="ht-note num">By quarter: '+esc(TL.abbr)+' '+G.qp[sl][0]+', '+G.qp[sl][1]+' · '+esc(TR.abbr)+' '+G.qp[sr][0]+', '+G.qp[sr][1]+'</p>':'';
+    cards.push({eb:mine?'Your game':'This game',t:H.su===H.sc?'All square after two quarters':esc((H.su>H.sc?u:c).name)+' leads by '+Math.abs(H.su-H.sc),h:hd+'<div class="ht-st">'+row('Total yards',B[sl].yds,B[sr].yds)+row('Passing',B[sl].pass,B[sr].pass)+row('Rushing',B[sl].rush,B[sr].rush)+row('First downs',B[sl].fd,B[sr].fd)+row('Turnovers',B[sl].to,B[sr].to,true)+'</div>'+qp});
+    const st=H.st,sc=(G.sco||[]).filter(x=>x.q<=2),perf=[];
+    if(st&&st.qb.att)perf.push([nmS('u','QB'),u,st.qb.cmp+' of '+st.qb.att+', '+st.qb.yds+' yards'+(st.qb.td?', '+st.qb.td+' TD':'')+(st.qb.int?', '+st.qb.int+' INT':'')]);
+    if(st&&st.rb.car)perf.push([nmS('u','RB'),u,st.rb.car+' carries, '+st.rb.yds+' yards'+(st.rb.td?', '+st.rb.td+' TD':'')]);
+    if(st&&st.wr.rec)perf.push([nmS('u','X'),u,st.wr.rec+' catches, '+st.wr.yds+' yards'+(st.wr.td?', '+st.wr.td+' TD':'')]);
+    const sp=sc.slice(-4).map(x=>'<div class="ht-pl"><i class="wx-dot" style="background:'+wxCol(x.s==='u'?u:c)+'"></i><span><b>'+esc((x.s==='u'?u:c).abbr)+' '+(x.p===6?'TD':x.p===3?'FG':x.p===2?'Safety':x.p+' pts')+'</b> '+esc(x.d||'')+'</span><em class="num">Q'+x.q+' '+fmtClock(x.c)+'</em></div>').join('');
+    if(perf.length||sp)cards.push({eb:'First half standouts',t:perf.length?(st.qb.yds>=st.rb.yds*1.6?esc(fcLast(nmS('u','QB')))+' through the air':st.rb.yds>=60?esc(fcLast(nmS('u','RB')))+' on the ground':esc(u.abbr)+' by committee'):'How they scored',h:perf.map(([n,T,l])=>'<div class="ht-pf"><i class="wx-dot" style="background:'+wxCol(T)+'"></i><b>'+esc(n)+'</b><span class="num">'+l+'</span></div>').join('')+(sp?'<span class="ht-sub">Scoring plays</span>'+sp:'')});
+  }
+  if(gs.length){
+    const top=gs.filter(x=>x.best<=PN).sort((a,b)=>b.pr-a.pr),used=new Set();
+    if(top.length){const L=top.slice(0,4);L.forEach(x=>used.add(x));const n1=top.filter(x=>x.fr<=PN&&x.dogUp).length;cards.push({eb:'Top '+PN+' scoreboard',t:n1?n1+' ranked team'+(n1===1?' is':'s are')+' trailing at the half':'The ranked teams are holding serve',h:L.map((x,i)=>htRow(x,i<2?htNote(x):'')).join('')})}
+    const ups=gs.filter(x=>x.alert&&!used.has(x)).sort((a,b)=>b.pr-a.pr).slice(0,3);
+    if(ups.length){ups.forEach(x=>used.add(x));cards.push({eb:'Upset watch',t:ups.length===1?esc(team(ups[0].dog).name)+' smells one':'Underdogs are barking',h:ups.map(x=>htRow(x,htNote(x))).join('')})}
+    const cf=gs.filter(x=>x.conf).sort((a,b)=>(b.div?1:0)-(a.div?1:0)||b.pr-a.pr),ut=team(S.userId),cfn=cf.filter(x=>!used.has(x)).slice(0,4);
+    if(cfn.length){const dl=htDivLine(cf);cards.push({eb:'Around the '+esc(CONFS[ut.conf]||'conference'),t:ut.div!=null&&DIVS&&DIVS[ut.conf]?'The '+esc(DIVS[ut.conf][ut.div])+' race':'Your conference',h:(dl?'<p class="ht-lead">'+dl+'</p>':'')+cfn.map(x=>htRow(x,'')).join('')});cfn.forEach(x=>used.add(x))}
+    else{const rest=gs.filter(x=>!used.has(x)).sort((a,b)=>(b.riv?30:0)-(a.riv?30:0)+a.mar-b.mar).slice(0,4);if(rest.length&&cards.length<5)cards.push({eb:'Best of the rest',t:rest.some(x=>x.riv)?'Rivalry games and close ones':'Close games elsewhere',h:rest.map((x,i)=>htRow(x,i<2?htNote(x):'')).join('')})}
+  }
+  /* what to watch */
+  {const K=[],B=H?H.box:G.box,d=(H?H.su-H.sc:G.su-G.sc),ld=d>0?u:c,tr=d>0?c:u,rv=g.riv!=null&&S.rivals[g.riv],X=fcCtx(),p=poll();
+    K.push('<b>'+esc(teamOf(G.kickFirst||'c').abbr)+'</b> gets the ball to open the third quarter.');
+    if(d===0)K.push('Tied at '+(H?H.su:G.su)+'. The first score of the half sets the tone.');else if(Math.abs(d)<=8)K.push('One-score game. The next turnover could decide it.');else if(Math.abs(d)>=17)K.push('Down '+Math.abs(d)+', <b>'+esc(tr.abbr)+'</b> needs a stop and a quick score or this gets away.');else K.push('<b>'+esc(tr.abbr)+'</b> is two scores back and cannot afford an empty first drive.');
+    const tu=B.u.to,tc=B.c.to;if(tu!==tc)K.push('<b>'+esc((tu>tc?u:c).abbr)+'</b> has '+Math.max(tu,tc)+' turnover'+(Math.max(tu,tc)===1?'':'s')+'. Ball security is the story.');
+    else{const ru=B.u.rush,rc=B.c.rush,best=ru>=rc?u:c,by=Math.max(ru,rc);if(by>=70)K.push('<b>'+esc(best.abbr)+'</b> has '+by+' rushing yards already. Can '+esc((best===u?c:u).abbr)+' stop the run?');else{const pu=B.u.pass,pc=B.c.pass;if(Math.max(pu,pc)>=120)K.push('<b>'+esc((pu>=pc?u:c).abbr)+'</b> is moving it through the air: '+Math.max(pu,pc)+' passing yards.')}}
+    if(X.dog&&X.dogUp)K.push('Upset watch: <b>'+esc(teamOf(X.dog).abbr)+'</b> came in as '+(X.sp>=6?'a '+X.sp+'-point underdog.':'the unranked team.'));
+    else if(rv&&rv.trophy)K.push('The '+esc(troN(rv).replace(/^the /i,''))+' goes home with the winner.');
+    else if(g.po||g.final)K.push('Win or go home. There is no next week for the loser.');
+    else if(S.week<12){const id=mine?S.userId:(G.rk.u<=G.rk.c?u.id:c.id),r=rankOf(id,p),T=team(id);if(r<=12)K.push('<b>'+esc(T.abbr)+'</b> is No. '+r+' and inside the playoff field. '+((id===u.id?d:-d)>=0?'A win keeps it that way.':'A loss here would cost them.'));else if(r<=PN+4)K.push('<b>'+esc(T.abbr)+'</b> sits at No. '+r+'. '+((id===u.id?d:-d)>=0?'Finishing this one keeps the playoff push alive.':'They need a comeback to stay in the hunt.'))}
+    cards.push({eb:'Second half',t:'What to watch',h:(hd||'')+'<ul class="ht-keys">'+K.slice(0,4).map(k=>'<li>'+k+'</li>').join('')+'</ul>'})}
+  return cards.slice(0,6);
+}
+let HT_TM=null;
+function htTimer(ms){clearTimeout(HT_TM);HT_TM=null;if(!SC.ht)return;HT_TM=setTimeout(()=>{if(!SC.ht||!G||S.view!=='game')return;const last=SC.ht.i>=SC.ht.cards.length-1;if(last){if(G.watch&&!SC.ht.replay)htClose();return}htGo(1)},ms);if(HT_TM&&HT_TM.unref)HT_TM.unref()}
+function htOpen(replay){
+  let cards;try{cards=htCards()}catch(e){cards=[]}if(!cards.length)return;
+  SC.ht={i:0,cards,replay:!!replay,d:8};clearTimeout(WT);htDraw();
+}
+function htMaybe(){if(!G||G.phase!=='half'||G.htSeen||SC.ht)return;G.htSeen=1;if(G.watch&&(S.fast||S.turbo))return;htOpen(false)}
+function htGo(d){const H=SC.ht;if(!H)return;const i=H.i+d;if(i<0)return;if(i>=H.cards.length){htClose();return}H.i=i;htDraw()}
+function htClose(quiet){if(!SC.ht)return;SC.ht=null;clearTimeout(HT_TM);HT_TM=null;if(typeof document.getElementById!=='function')return;const el=document.getElementById('g-half');if(el)el.innerHTML='';if(!quiet&&G&&S.view==='game'){gdRender();if(G.watch)watchSchedule()}}
+function htDraw(){
+  const H=SC.ht;if(!H||typeof document.getElementById!=='function')return;const el=document.getElementById('g-half');if(!el)return;const c=H.cards[H.i],n=H.cards.length,last=H.i===n-1;
+  el.innerHTML='<div class="ht-wrap" role="dialog" aria-modal="true" aria-label="Halftime report"><div class="ht-card"><div class="ht-top"><span class="ht-logo"><i></i>Halftime report</span><span class="ht-n num">'+(H.i+1)+' / '+n+'</span><button class="ht-skip" data-act="htskip">Skip</button></div>'+
+    '<div class="ht-prog">'+H.cards.map((_,i)=>'<span class="'+(i<H.i?'done':i===H.i?'on':'')+'"><i style="animation-duration:'+H.d+'s"></i></span>').join('')+'</div>'+
+    '<div class="ht-body" data-act="htnext"><span class="eyebrow">'+c.eb+'</span><h2>'+c.t+'</h2>'+c.h+'</div>'+
+    '<div class="ht-nav"><button class="btn ghost small" data-act="htprev"'+(H.i?'':' disabled')+'>Back</button><button class="btn small" data-act="htnext">'+(last?(H.replay?'Close':G.watch?'Back to the game':'To the locker room'):'Next')+'</button></div></div></div>';
+  htTimer(H.d*1000);
 }
 
 /* ---------- league archive 2006 to 2025: seasons, title games, brackets, bowls, Heismans, records, rivalry meetings ---------- */
@@ -3019,7 +3480,7 @@ const teamOf=s=>s==='u'?team(GU()):team(G.opp);
 const nmS=(side,slot)=>(G.ros[side][slot]||{name:slot}).name;
 function tag(){if(G.ot)return 'OT'+(G.ot>1?G.ot:'');return 'Q'+G.q+' '+fmtClock(G.clock)}
 function fmtClock(s){s=Math.max(0,Math.round(s));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0')}
-function log(t,k=''){G.log.unshift({t,k,g:tag()});if(G.log.length>80)G.log.length=80}
+function log(t,k=''){G.log.unshift({t,k,g:tag()});if(G.log.length>80)G.log.length=80;G.ln=(G.ln||0)+1;if(t==='Halftime.')try{htSnap()}catch(e){}}
 function tick(t){if(!G.ot)G.clock=Math.max(0,G.clock-t);G.lastRun=t>9?t-6:0}
 function newDrive(){G.drive={n:0,y:0,t0:G.clock,q0:G.q}}
 function mo(side,amt){G.mom=clamp((G.mom||0)+(side==='u'?amt:-amt),-100,100)}
@@ -3397,7 +3858,7 @@ function applyResult(side,pk,dc,r){
   else{G.down++;if(G.down>4){txt+=' Turnover on downs.';mo(opp,20);flash('STOPPED',opp);setL(txt,'to');log(txt,'to');changePoss(opp,100-G.ball);return}}
   setL(txt);log(txt);
 }
-function addPts(side,n){side==='u'?G.su+=n:G.sc+=n;if(!G.qp)G.qp={u:[0,0,0,0,0],c:[0,0,0,0,0],ok:G.su+G.sc===n};G.qp[side][G.ot?4:Math.min(G.q,4)-1]+=n;G.big=G.big||{u:0,c:0};G.big.u=Math.max(G.big.u,G.sc-G.su);G.big.c=Math.max(G.big.c,G.su-G.sc)}
+function addPts(side,n){side==='u'?G.su+=n:G.sc+=n;if(!G.qp)G.qp={u:[0,0,0,0,0],c:[0,0,0,0,0],ok:G.su+G.sc===n};G.qp[side][G.ot?4:Math.min(G.q,4)-1]+=n;G.big=G.big||{u:0,c:0};G.big.u=Math.max(G.big.u,G.sc-G.su);G.big.c=Math.max(G.big.c,G.su-G.sc);try{wxScore(side,n)}catch(e){}}
 const leads=side=>side==='u'?G.su>G.sc:G.sc>G.su;
 function touchdown(side){
   addPts(side,6);log('TOUCHDOWN '+abbrOf(side)+'.','td');mo(side,22);flash('TOUCHDOWN',side);
@@ -4360,6 +4821,7 @@ function update(dt){
   try{audTick(dt)}catch(e){}
   try{scoreRoll()}catch(e){}
   try{tickStep(dt)}catch(e){}
+  try{gdStep(dt)}catch(e){}
   SC.t+=dt;SC.hype=Math.max(G&&S.games[G.gid]&&bigRiv(S.games[G.gid])?.62:G&&S.games[G.gid]&&S.games[G.gid].riv!=null?.4:.18,SC.hype-dt*.1);
   const A=SC.A;
   if(A)stepAnim(A,dt*A.spd);
@@ -5715,7 +6177,7 @@ function renderGame(){
   const app=$('#app');
   if(typeof document.getElementById!=='function')return;
   if(!document.getElementById('fieldc')){
-    app.innerHTML='<div id="g-top" style="display:flex;flex-direction:column;gap:8px"></div><div id="g-tick"></div><div class="fieldwrap"><canvas id="fieldc" aria-label="Live field. Tap a receiver to throw."></canvas><div class="ovl" id="g-ovl"></div><div class="ovb" id="g-ovb"></div><div id="g-flash"></div><div id="g-intro"></div><button id="g-snd" class="sndb" data-act="sound" aria-label="Stadium sound">'+(audPref()?'&#128266; Sound on':'&#128264; Sound off')+'</button></div><div id="g-ctrl"></div><div id="g-last"></div><div id="g-log"></div>';
+    app.innerHTML='<div id="g-top" style="display:flex;flex-direction:column;gap:8px"></div><div id="g-tick"></div><div class="fieldwrap"><canvas id="fieldc" aria-label="Live field. Tap a receiver to throw."></canvas><div class="ovl" id="g-ovl"></div><div class="ovb" id="g-ovb"></div><div id="g-flash"></div><div id="g-intro"></div><button id="g-snd" class="sndb" data-act="sound" aria-label="Stadium sound">'+(audPref()?'&#128266; Sound on':'&#128264; Sound off')+'</button></div><div id="g-ctrl"></div><div id="g-last"></div><div id="g-dock"></div><div id="g-half"></div>';
     initCanvas();SC.reset=true;
   }
   {const el=document.getElementById('g-intro');if(el){if(G.intro&&!el.firstChild)el.innerHTML=introHTML();else if(!G.intro&&el.firstChild)el.innerHTML=''}}
@@ -5724,7 +6186,7 @@ function renderGame(){
   document.getElementById('g-ovb').innerHTML=ovbHTML();
   document.getElementById('g-ctrl').innerHTML=controls();
   document.getElementById('g-last').innerHTML=lastHTML();
-  document.getElementById('g-log').innerHTML=logHTML();
+  gdRender();
   if(G.phase==='over'&&(G.storm||G.title||G.trophy)&&!SC.stormFlash)G.flash=null;
   if(G&&!G.srShown&&S.games[G.gid]&&isSeniorDay(S.games[G.gid])){G.srShown=true;const g0=S.games[G.gid],nm=seniorNames(g0.h);log('Senior Day at '+team(g0.h).name+'. '+(nm.length?'Honoring '+nm.join(', ')+' and the rest of the senior class before kickoff.':'The senior class is honored before kickoff.')+' Not a dry eye in the place.','k');SC.hype=Math.max(SC.hype,.6)}
   if(G&&!G.envShown&&S.games[G.gid]){G.envShown=true;const EV=envG();if(EV.theme){if(!G.flash)G.flash={txt:THEME[EV.theme].n,side:homeSide()};log((EV.night?'Under the lights and a ':'A ')+THEME[EV.theme].w+' at '+team(S.games[G.gid].h).name+'. The place is shaking.','k')}if(EV.weather!=='clear'&&!EV.dome)log({rain:'Rain coming down. Ball security matters today.',snow:'Snow falling at kickoff. Footing will be a problem.',wind:'Wind swirling hard. Deep balls and long kicks are an adventure.'}[EV.weather],'k')}
@@ -5770,6 +6232,7 @@ function act(a,d){
   const inGame=S&&S.view==='game'&&G;
   if(a==='introskip'){endIntro();return}
   if(a==='logoreset'){const ab=d&&d.ab;if(ab&&S.logos&&S.logos[ab])delete S.logos[ab];save();render();return}
+  if(gdAct(a,d))return;
   if(a==='tkmore'){S.tkAll=!S.tkAll;const el=document.getElementById('g-tick');if(el)el._h=null;tickRefresh();return}
   if(a==='cdreplay'){S.cdSeen=null;render();return}
   if(a==='cdopen'){const D=cdData();if(D)S.cdOpen=S.season+'-'+D.wk;render();return}
@@ -5781,8 +6244,8 @@ function act(a,d){
   if(a==='rtarget'){const B=recBoard(),id=+d.r,i=B.targets.indexOf(id);if(i>=0)B.targets.splice(i,1);else if(B.targets.length<3)B.targets.push(id);save();render();return}
   if(a==='heisreplay'){S.heisSeen=null;const el=document.querySelector('.heis');if(el){const n=el.cloneNode(true);n.classList.remove('seen');el.replaceWith(n)}return}
   if(a==='sound'){audSet(!AUD.on);const b=document.getElementById('g-snd');if(b)b.innerHTML=AUD.on?'&#128266; Sound on':'&#128264; Sound off';if(AUD.on)setTimeout(()=>{try{if(S&&S.view==='game'&&G)audSong(teamOf(homeSide()).id,2,.9)}catch(e){}},150);return}
-  if(inGame&&SC.A&&G.watch&&['wdrive','wq','wend','takeover','wfinish','wexit'].includes(a)){let i=0;while(SC.A&&i++<8){const A0=SC.A;skipAnimForce(A0)}}
-  if(inGame&&SC.A&&!['throw','scramble','away','skip','fast','chalk','wauto','sound'].includes(a))return;
+  if(inGame&&SC.A&&G.watch&&['wdrive','wq','wend','takeover','wfinish','wexit','wscore'].includes(a)&&!(a==='wexit'&&!d.sure)){let i=0;while(SC.A&&i++<8){const A0=SC.A;skipAnimForce(A0)}}
+  if(inGame&&SC.A&&!['throw','scramble','away','skip','fast','chalk','wauto','sound','wspd','wexit'].includes(a))return;
   switch(a){
     case 'pick':{
       const id=+d.id;
@@ -5889,12 +6352,15 @@ function act(a,d){
     case 'finish':finishUserGame();window.scrollTo(0,0);break;
     case 'watch':{const g=S.games[+d.g];if(!g||g.done||g.h===S.userId||g.a===S.userId)break;S.gview=null;startWatch(g);window.scrollTo(0,0);break}
     case 'uwatch':{const g=userGame(S.week);if(!g)break;tagRivals();stampGame(g);SC.stormDone=false;SC.stormFlash=false;SC.fans=[];SC.conf=[];startGame(g);G.watch=true;G.mine=true;G.uid=S.userId;G.auto=true;window.scrollTo(0,0);break}
-    case 'takeover':clearTimeout(WT);G.watch=false;G.auto=false;G.mine=false;if(G.phase==='off'||G.phase==='def')prep();log('You take over the play calling.','k');break;
+    case 'takeover':clearTimeout(WT);SC.wxLeave=false;G.watch=false;G.auto=false;G.mine=false;if(G.phase==='off'||G.phase==='def')prep();log('You take over the play calling.','k');break;
     case 'wauto':G.auto=!G.auto;clearTimeout(WT);break;
     case 'wstep':watchStep();return;
-    case 'wdrive':simDrive();afterCommit();return;
-    case 'wq':{const q=G.q,ot=G.ot;let i=0;while(G.phase!=='over'&&G.q===q&&G.ot===ot&&i++<600)autoStep();G.koAnim=null;afterCommit();return}
-    case 'wend':simToEnd();afterCommit();return;
+    case 'wdrive':simDrive();wxSkipped();afterCommit();return;
+    case 'wq':{const q=G.q,ot=G.ot;let i=0;while(G.phase!=='over'&&G.q===q&&G.ot===ot&&i++<600)autoStep();G.koAnim=null;wxSkipped();afterCommit();return}
+    case 'wend':simToEnd();wxSkipped();afterCommit();return;
+    case 'wscore':{const t=G.su+G.sc;let i=0;while(G.phase!=='over'&&i++<1500&&(G.su+G.sc===t||G.phase==='pat'||G.phase==='patk'||G.pat2))autoStep();G.koAnim=null;wxSkipped();afterCommit();return}
+    case 'wspd':{clearTimeout(WT);SC.wxLeave=false;if(d.s==='pause')G.auto=false;else{G.auto=true;S.fast=d.s!=='1';S.turbo=d.s==='max';if(SC.A)SC.A.spd=S.fast?1.7:1;if(S.turbo&&SC.A&&!SC.A.await){let i=0;while(SC.A&&i++<8)skipAnimForce(SC.A)}}break}
+    case 'wexit':{if(!G.watch)break;if(d.no){SC.wxLeave=false;break}if(!d.sure&&G.phase!=='over'){SC.wxLeave=true;break}SC.wxLeave=false;clearTimeout(WT);if(G.phase!=='over')simToEnd();if(G.mine)finishUserGame();else finishWatch();window.scrollTo(0,0);break}
     case 'wfinish':finishWatch();window.scrollTo(0,0);break;
     case 'recruit':S.recruit=d.r;break;
     case 'next':offseason();if(S.move!=null)switchJob(S.move);startSeason();window.scrollTo(0,0);break;
