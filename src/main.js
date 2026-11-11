@@ -2256,8 +2256,8 @@ function htCards(){
     cards.push({eb:mine?'Your game':'This game',t:H.su===H.sc?'All square after two quarters':esc((H.su>H.sc?u:c).name)+' leads by '+Math.abs(H.su-H.sc),h:hd+'<div class="ht-st">'+row('Total yards',B[sl].yds,B[sr].yds)+row('Passing',B[sl].pass,B[sr].pass)+row('Rushing',B[sl].rush,B[sr].rush)+row('First downs',B[sl].fd,B[sr].fd)+row('Turnovers',B[sl].to,B[sr].to,true)+'</div>'+qp});
     const st=H.st,sc=(G.sco||[]).filter(x=>x.q<=2),perf=[];
     if(st&&st.qb.att)perf.push([nmS('u','QB'),u,st.qb.cmp+' of '+st.qb.att+', '+st.qb.yds+' yards'+(st.qb.td?', '+st.qb.td+' TD':'')+(st.qb.int?', '+st.qb.int+' INT':'')]);
-    if(st&&st.rb.car)perf.push([nmS('u','RB'),u,st.rb.car+' carries, '+st.rb.yds+' yards'+(st.rb.td?', '+st.rb.td+' TD':'')]);
-    if(st&&st.wr.rec)perf.push([nmS('u','X'),u,st.wr.rec+' catches, '+st.wr.yds+' yards'+(st.wr.td?', '+st.wr.td+' TD':'')]);
+    if(st&&st.rb.car)perf.push([nmS('u','RB'),u,st.rb.car+(st.rb.car===1?' carry, ':' carries, ')+st.rb.yds+(st.rb.yds===1?' yard':' yards')+(st.rb.td?', '+st.rb.td+' TD':'')]);
+    if(st&&st.wr.rec)perf.push([nmS('u','X'),u,st.wr.rec+(st.wr.rec===1?' catch, ':' catches, ')+st.wr.yds+' yards'+(st.wr.td?', '+st.wr.td+' TD':'')]);
     const sp=sc.slice(-4).map(x=>'<div class="ht-pl"><i class="wx-dot" style="background:'+wxCol(x.s==='u'?u:c)+'"></i><span><b>'+esc((x.s==='u'?u:c).abbr)+' '+(x.p===6?'TD':x.p===3?'FG':x.p===2?'Safety':x.p+' pts')+'</b> '+esc(x.d||'')+'</span><em class="num">Q'+x.q+' '+fmtClock(x.c)+'</em></div>').join('');
     if(perf.length||sp)cards.push({eb:'First half standouts',t:perf.length?(st.qb.yds>=st.rb.yds*1.6?esc(fcLast(nmS('u','QB')))+' through the air':st.rb.yds>=60?esc(fcLast(nmS('u','RB')))+' on the ground':esc(u.abbr)+' by committee'):'How they scored',h:perf.map(([n,T,l])=>'<div class="ht-pf"><i class="wx-dot" style="background:'+wxCol(T)+'"></i><b>'+esc(n)+'</b><span class="num">'+l+'</span></div>').join('')+(sp?'<span class="ht-sub">Scoring plays</span>'+sp:'')});
   }
