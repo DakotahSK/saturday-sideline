@@ -6,7 +6,7 @@ let gdc=0,recNews=0,themed=0,sd=0;
 for(let season=0;season<2;season++){
   let guard=0;const B0=recBoard();for(const r of B0.list.slice(4,7))act('rtarget',{r:String(r.id)});
   while(S.view!=='summary'&&guard++<60){
-    S.tab='week';chk('week',()=>weekTab());chk('prog',()=>progTab());const gd=chk('gd',()=>gdCard());if(gd)gdc++;
+    S.tab='week';chk('week',()=>weekTab());chk('week all',()=>weekTab('all'));chk('buzz',()=>weekTab('buzz'));chk('prog',()=>progTab());chk('prog all',()=>progTab('all'));chk('league all',()=>leagueTab('all'));chk('teams all',()=>schedTab('all'));for(const f of ['top','all','rk','c0','up']){S.lgF=f;for(const w of [null,S.week-1]){S.scWeek=w;chk('scores '+f,()=>scoresView(poll()))}}S.lgF=null;S.scWeek=null;for(const t of ['week','league','poll','stand','bracket','sched','prog']){S.tab=t;chk('hub '+t,()=>hubView())}S.tab='week';const gd=chk('gd',()=>gdCard());if(gd)gdc++;
     for(const g of S.games.filter(g=>g.wk===S.week)){if(gameEnv(g).theme)themed++;if(isSeniorDay(g))sd++}
     if(S.selPending){S.selPending=false}
     const ug=userGame(S.week);
