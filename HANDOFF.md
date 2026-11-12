@@ -49,6 +49,8 @@ Known leftovers and polish ideas (not done):
 - Parity (done 2026-11-11, version 96, he approved): in `recruitAll` prestige weight in class score .5 to .38, coach weight .3 to .45, last-season wins .6 to .8, coach development .05 to .08, prestige blend .8/.2 to .72/.28. `tests/parity_t.js` (run from tests/, slow): 8-season sim went from 10 to 13 distinct top-4 teams, top-8 carryover 5.4 to 5.1. Next dial if he wants more: prestige blend .65/.35 or coach weight .55.
 - Also in version 96: Rankings > Recruits tab (full class rankings), score bug tightened for phones (CSS media queries at 520px and 400px only, he approved), arc tuning (hot seat starts for weak teams at 0-4/1-5, free fall needs 4 losses unless preseason top 3).
 
+Feature ideas he wants to keep are in `IDEAS.md`. Do not build any without asking.
+
 ## Starter prompt for a new chat
 
 > I'm continuing my Saturday Sideline game. The code is in my GitHub repo DakotahSK/saturday-sideline. Attach it, read HANDOFF.md in the repo, then pick up the next unfinished item. My game is at https://claude.ai/artifact/MjH8uh9Q7zihqKJGq7rEPB.
